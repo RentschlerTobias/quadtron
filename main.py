@@ -1,25 +1,62 @@
 
 from tokenizer import Tokenizer2D
 from embedding import Embedding
+from hourglass_transformer import HourglassTransformer
 import torch
-
-path = '../meshtron_autoregession/data/quad_meshes.pt'
+from point_encoder import PerceiverPointEncoder
+path = '../data/quad_data.pt'
 meshes = torch.load(path)
-mesh = meshes[0]
 
-quantization = 512
-d_model = 128
-vertices = mesh.x[:, 0:2]
-faces = mesh.faces
+quantization = 1024
+d_model = 512
+n_latents = d_model
+input_dim = 2
+stage_layers = [4, 8, 12, 16, 20]
+batch = 1
 tokenizer = Tokenizer2D(quantization_levels=quantization)
-tokens, info = tokenizer.tokenize(vertices, faces, verbose=False)
-token_sequence = len(tokens)
+
+
+max_len = 0
+
+for i in range(10):
+    mesh = meshes[i]
+    vertices = mesh.x[:, 0:2]
+    faces = mesh.faces
+    tokens, info = tokenizer.tokenize(vertices, faces, verbose=False)
+    token_sequence = len(tokens)
+    if max_len < token_sequence:
+        max_len = token_sequence
+
+
+print(max_len)
 
 embedder = Embedding(vocab_size=quantization+3,
-                     d_model=d_model, max_len=token_sequence)
+                     d_model=d_model, max_len=max_len)
 embeddings = embedder(torch.tensor(tokens))
 embeddings.size()
 
+mesh = meshes[1]
+point_cloud = mesh.tri_coordinates[:, 0:2]
 
-for i in range(10):
-    print(i)
+point_cloud.size()
+point_cloud = point_cloud.unsqueeze(0)
+point_cloud.size()
+point_cloud_encoder = PerceiverPointEncoder(d_model, input_dim, n_latents)
+
+latent_condition = point_cloud_encoder(point_cloud)
+latent_condition.size()
+
+
+transformer = HourglassTransformer(d_model=d_model, stage_layers=stage_layers, d_ff=4*d_model, dropout=0.1, shortening_method='linear',
+        upsampling_method: str='linear',
+   )
+transformer = HourglassTransformer(
+        d_model=d_model
+        n_heads=8,
+        d_ff=4*d_model,
+        dropout=0.1,
+        shortening_method='linear',
+        upsampling_method='linear',
+        use_static_routing=True,
+        input_dim=2,
+        n_latents=32
