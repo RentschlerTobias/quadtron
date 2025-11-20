@@ -166,7 +166,7 @@ class HourglassTransformerBlock(nn.Module):
     def __init__(self, d_model: int, n_heads: int, d_ff: int, dropout: float = 0.1):
         super().__init__()
         self.attention = nn.MultiheadAttention(
-            d_model, n_heads, dropout=dropout, batch_first=True)
+            d_model, n_heads, dropout=dropout, batch_first=True, is_causal=True)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
 
@@ -262,9 +262,8 @@ class HourglassTransformer(nn.Module):
         dropout: float = 0.1,
         shortening_method: str = 'linear',
         upsampling_method: str = 'linear',
-        use_static_routing: bool = True,
-        input_dim=2,
-        n_latents=32
+        use_static_routing: bool = True
+
     ):
         """
         Args:

@@ -45,18 +45,21 @@ point_cloud_encoder = PerceiverPointEncoder(d_model, input_dim, n_latents)
 
 latent_condition = point_cloud_encoder(point_cloud)
 latent_condition.size()
+tokens[0]
 
-
-transformer = HourglassTransformer(d_model=d_model, stage_layers=stage_layers, d_ff=4*d_model, dropout=0.1, shortening_method='linear',
-        upsampling_method: str='linear',
-   )
 transformer = HourglassTransformer(
-        d_model=d_model
-        n_heads=8,
-        d_ff=4*d_model,
-        dropout=0.1,
-        shortening_method='linear',
-        upsampling_method='linear',
-        use_static_routing=True,
-        input_dim=2,
-        n_latents=32
+    d_model=d_model,
+    n_heads=8,
+    d_ff=4*d_model,
+    dropout=0.1,
+    shortening_method='attention',
+    upsampling_method='attention',
+    use_static_routing=True
+)
+
+embeddings = embedder(torch.tensor(tokens[:10]))
+input = embeddings.unsqueeze(0)
+input.size()
+
+logig = transformer(x=input, latent_condition=latent_condition)
+logig.size()
