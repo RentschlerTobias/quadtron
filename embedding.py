@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import math
 
-# Minimale Positional Encoding Klasse
+from positional_encoder import RoPEPositionalEncoding
 
 
 class PositionalEncoding(nn.Module):
@@ -34,8 +34,9 @@ class Embedding(nn.Module):
     def __init__(self, vocab_size=259, d_model=512, max_len=5000):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, d_model)
-        self.pos_encoding = PositionalEncoding(d_model, max_len)
+        # self.pos_encoding = PositionalEncoding(d_model, max_len)
+        # self.pos_encoding = RoPEPositionalEncoding(d_model, max_len)
 
     def forward(self, tokens):
         embeddings = self.embedding(tokens)
-        return self.pos_encoding(embeddings)
+        return embeddings

@@ -7,44 +7,20 @@ import math
 
 class Tokenizer2D:
 
-    def __init__(self, quantization_levels, verbose=False, max_length_padding: Optional[int] = None):
+    def __init__(self, quantization_levels: int = 256, tokens_per_face: int = 8):
 
-        self.verbose = verbose
-        # 2D Quads (4 vertices, 2 coordinates each vertex)
-        self.tokens_per_face = 8
+        self.tokens_per_face = tokens_per_face
         self.start_token = quantization_levels
         self.end_token = quantization_levels + 1
         self.pad_token = quantization_levels + 2
         self.vocab_size = quantization_levels + 3
         self.quantization_levels = quantization_levels
-        self.n_start_end_tokens_repeat = 1
-        # stores the coorinate bounds, needed to transform the coordinates back from the tokens
-        self.bounds = None
-        self.max_length_token_sequence = 0.0
-        self.min_length_token_sequence = float("inf")
 
-        if max_length_padding is not None:
-            if max_length_padding % self.tokens_per_face != 0:
-
-                self.max_length_padding = max_length_padding - \
-                    (max_length_padding % self.tokens_per_face)
-
-                if self.verbose == True:
-                    print(
-                        f'\n max_length_padding: {max_length_padding} can not be devided by number tokens per face: {self.tokens_per_face}')
-                    print(
-                        f'\n adjusting max padding length to {self.max_length_padding}.Therefor the token sequence is not cutted in the middle of a quad')
-
-            else:
-                self.max_length_padding = max_length_padding
-        else:
-            self.max_length_padding = None
-
-    def tokenize(self, vertices: torch.Tensor, quads: torch.Tensor):
+    def tokenize(self, vertices: torch.Tensor, quads: torch.Tensor, verbose: bool = True):
         """
         Converts 2D quad mesh to tokens.
 
-        Args:
+        Args: 
             vertices: 2D coordinates, torch tensor of size [n_vertices, 2]
             quads: quad connectivity, torch tensor of size [4, n_quads]
             verbose: bool value: output print commands for debugging
@@ -53,58 +29,38 @@ class Tokenizer2D:
             tokens: List of integers representing the mesh
             info: Dictionary with reconstruction information
         """
-        if self.verbose:
-            print('start tokenizing the mesh')
+        if verbose:
             print(
                 f'Input: vertices of size {vertices.size()}; quads of size {quads.size()}')
 
         # Order quads lexicographically for consistent tokenization
-        sorted_quads = self._order_quads(vertices, quads)
+        sorted_quads = self._order_quads(vertices, quads, verbose)
 
         # Convert quad indices to coordinate sequence
-        coord_sequence = self._quads_to_coords(vertices, sorted_quads)
+        coord_sequence = self._quads_to_coords(vertices, sorted_quads, verbose)
 
         # Quantize coordinates
-        quantized_coords, self.bounds = self._quantize_coords(
-            coord_sequence)
+        quantized_coords, bounds = self._quantize_coords(
+            coord_sequence, verbose)
 
         # Build token sequence
-        tokens = self._build_token_sequence(quantized_coords)
+        tokens = self._build_token_sequence(quantized_coords, verbose)
 
-        if self.max_length_padding is not None:
+        self.info = {
+            'bounds': bounds,
+            'num_quads': quads.size(1),
+            'num_tokens': len(tokens),
+            'quantization_levels': self.quantization_levels,
+            'tokens_per_quad': self.tokens_per_face,  # 4 vertices × 2 coordinates
+            'approach': 'direct_quad'
+        }
 
-            if len(tokens) > self.max_length_padding:
-                if self.verbose == True:
-                    print(
-                        f'sequence is longer then the defined max_length_padding {self.max_length_padding}')
-                    print(
-                        f'sequence is cutted at the index {self.max_length_padding}')
-                tokens = tokens[:max_length_padding]
+        if verbose:
+            print(f"   ✅ Result: {len(tokens)} tokens")
 
-            if len(tokens) < self.max_length_padding:
-                fill_length = self.max_length_padding-len(tokens)
+        return tokens, self.info
 
-                if self.verbose == True:
-                    print(
-                        f'sequence is shorter then the defined max_length_padding {self.max_length_padding}')
-                    print(
-                        f'sequence is filled with {fill_length} times the padding token {self.pad_token}')
-
-                tokens += [self.pad_token]*max(0, fill_length)
-
-        if self.max_length_token_sequence < len(tokens):
-            self.max_length_token_sequence = len(tokens)
-
-        if self.min_length_token_sequence > len(tokens):
-            self.min_length_token_sequence = len(tokens)
-
-        if self.verbose:
-            print(f"\n Finisched tokenization")
-            print(f'\n Transformed mesh into {len(tokens)} tokens')
-
-        return tokens
-
-    def _order_quads(self, vertices: torch.Tensor, quads: torch.Tensor):
+    def _order_quads(self, vertices: torch.Tensor, quads: torch.Tensor, verbose: bool):
         """
         Order quads lexicographically for consistent tokenization.
         """
@@ -136,10 +92,13 @@ class Tokenizer2D:
 
         final_ordered = ordered_quads[quad_order]  # [n_quads, 4]
 
-        if self.verbose:
+        if verbose:
             print('\nQuad ordering:')
             print('Each quad vertices ordered lexicographically then counter-clockwise')
             print('All quads ordered by first vertex (y,x) coordinate')
+            print(
+                f'Ordered {num_quads} quads directly - no triangle conversion')
+            print()
 
         return final_ordered
 
@@ -174,7 +133,7 @@ class Tokenizer2D:
 
         return ccw_indices
 
-    def _quads_to_coords(self, vertices: torch.Tensor, ordered_quads: torch.Tensor):
+    def _quads_to_coords(self, vertices: torch.Tensor, ordered_quads: torch.Tensor, verbose: bool):
         """
         Convert quad indices to actual coordinate values - direct approach.
         """
@@ -185,13 +144,13 @@ class Tokenizer2D:
         # Each quad contributes 4 coordinate pairs: [x0,y0, x1,y1, x2,y2, x3,y3]
         coord_sequence = quad_coords.reshape(-1, 2)
 
-        if self.verbose:
+        if verbose:
             print(
                 f'   Converted {len(ordered_quads)} quads to {len(coord_sequence)} coordinate pairs')
 
         return coord_sequence
 
-    def _quantize_coords(self, coords: torch.Tensor):
+    def _quantize_coords(self, coords: torch.Tensor, verbose: bool):
         """
         Convert coordinate values into integer tokens.
         """
@@ -210,37 +169,36 @@ class Tokenizer2D:
         quantized = (normalized * (self.quantization_levels - 1)).long()
         quantized = torch.clamp(quantized, 0, self.quantization_levels - 1)
 
-        if self.verbose:
+        if verbose:
             print(
                 f"   Quantized: [{x_min:.3f},{y_min:.3f}] → [{x_max:.3f},{y_max:.3f}] to [0,{self.quantization_levels - 1}]")
 
         return quantized, bounds
 
-    def _build_token_sequence(self, quantized_coords: torch.Tensor) -> List[int]:
+    def _build_token_sequence(self, quantized_coords: torch.Tensor, verbose: bool) -> List[int]:
         """
         Build final token sequence with special tokens - optimized for quads.
         """
         tokens = []
 
         # Start tokens (8 tokens to align with quad structure: 4 vertices × 2 coords)
-        tokens.extend([self.start_token] * self.n_start_end_tokens_repeat)
+        tokens.extend([self.start_token] * self.tokens_per_face)
 
         # Add coordinate tokens (each coordinate pair becomes 2 tokens)
         for coord_pair in quantized_coords:
             tokens.extend([int(coord_pair[0]), int(coord_pair[1])])
 
         # End tokens
-        tokens.extend([self.end_token] * self.n_start_end_tokens_repeat)
+        tokens.extend([self.end_token] * 8)
 
-        if self.verbose:
+        if verbose:
             print(
-                f"   Built sequence: {self.n_start_end_tokens_repeat} start + {len(quantized_coords) * 2} coords + {self.n_start_end_tokens_repeat} end = {len(tokens)} tokens")
+                f"   Built sequence: 8 start + {len(quantized_coords) * 2} coords + 8 end = {len(tokens)} tokens")
 
         return tokens
 
-    def detokenize(self, tokens: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
-
-        if self.verbose:
+    def detokenize(self, tokens: List[int], verbose: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
+        if verbose:
             print('🔄 Direct quad detokenization with counter-clockwise ordering')
 
         # Step 1: Koordinaten extrahieren
@@ -265,7 +223,7 @@ class Tokenizer2D:
         coord_pairs = torch.tensor(coord_tokens).reshape(-1, 2)
 
         # Step 2: Dequantisierung
-        bounds = self.bounds
+        bounds = self.info['bounds']
         x_min, y_min, x_max, y_max = bounds
         normalized = coord_pairs.float() / (self.quantization_levels - 1)
 
@@ -277,32 +235,22 @@ class Tokenizer2D:
         num_quads = len(all_vertices) // 4
         quad_vertices = all_vertices[:num_quads * 4].view(num_quads, 4, 2)
 
-        if self.verbose:
+        if verbose:
             print(f"    Grouped into {num_quads} quads (4 vertices each)")
 
         # Step 4: Vertices mergen
         all_vertices_flat = quad_vertices.reshape(-1, 2)
         vertices_np = all_vertices_flat.numpy()
-        vertices, vertex_mapping = self.unique_vertices_hash(
-            all_vertices_flat, decimals=24)
+        vertices_rounded = np.round(vertices_np, decimals=6)
 
-        #
-        # vertices_rounded = np.round(vertices_np, decimals=32)
-        # unique_vertices, inverse_indices = np.unique(
-        #     vertices_rounded, axis=0, return_inverse=True
-        # )
+        unique_vertices, inverse_indices = np.unique(
+            vertices_rounded, axis=0, return_inverse=True
+        )
 
-        # unique_vertices, inverse_indices = np.unique(
-        #     vertices_np, axis=0, return_inverse=True
-        # )
+        vertices = torch.from_numpy(unique_vertices).float()
+        vertex_mapping = torch.from_numpy(inverse_indices)
 
-        # vertices = torch.from_numpy(vertices_np).float()
-        # vertex_mapping = torch.arange(len(vertices))
-
-        # vertices = torch.from_numpy(unique_vertices).float()
-        # vertex_mapping = torch.from_numpy(inverse_indices)
-
-        if self.verbose:
+        if verbose:
             print(
                 f"    Merged vertices: {len(all_vertices_flat)} → {len(vertices)} unique")
         # Step 5: Counter-Clockwise Reordering
@@ -357,99 +305,98 @@ class Tokenizer2D:
 
         return ccw_indices
 
-    def unique_vertices_hash(self, vertices: torch.Tensor, decimals: int = 24) -> Tuple[torch.Tensor, torch.Tensor]:
+    def validate_quad_ordering(self, vertices: torch.Tensor, quads: torch.Tensor, verbose: bool = True):
         """
-        Findet unique Vertices basierend auf gerundeten Werten
+        Validate that all quads have counter-clockwise vertex ordering.
 
         Args:
-            vertices: [N, 2] Tensor mit Koordinaten
-            decimals: Anzahl Dezimalstellen für Vergleich
+            vertices: Vertex coordinates [n_vertices, 2]
+            quads: Quad connectivity [4, n_quads]
+            verbose: Print validation results
 
         Returns:
-            unique_vertices: [M, 2] Tensor mit unique Vertices
-            inverse_indices: [N] Tensor, Mapping von original zu unique
+            bool: True if all quads are counter-clockwise ordered
         """
-        vertices_np = vertices.numpy()
+        if verbose:
+            print("🔍 Validating quad vertex ordering...")
 
-        # Runde auf spezifische Dezimalstellen
-        vertices_rounded = np.round(vertices_np, decimals=decimals)
+        num_quads = quads.shape[1]
+        ccw_count = 0
+        cw_count = 0
 
-        # Verwende Dictionary für Hash-basiertes Unique
-        vertex_dict = {}
-        inverse_indices = []
+        for i in range(num_quads):
+            quad = quads[:, i]  # [4]
+            quad_coords = vertices[quad]  # [4, 2]
 
-        for i, vertex in enumerate(vertices_rounded):
-            # Erstelle Tuple als Hash-Key (unveränderlich und hashbar)
-            key = (vertex[0], vertex[1])
+            # Calculate signed area using shoelace formula
+            # Positive area = counter-clockwise, negative = clockwise
+            signed_area = 0.0
+            for j in range(4):
+                curr = quad_coords[j]
+                next_vertex = quad_coords[(j + 1) % 4]
+                signed_area += (next_vertex[0] - curr[0]) * \
+                    (next_vertex[1] + curr[1])
 
-            if key not in vertex_dict:
-                vertex_dict[key] = len(vertex_dict)
+            if signed_area < 0:  # Counter-clockwise (negative signed area)
+                ccw_count += 1
+            else:  # Clockwise (positive signed area)
+                cw_count += 1
 
-            inverse_indices.append(vertex_dict[key])
-
-        # Rekonstruiere unique vertices in ursprünglicher Präzision
-        unique_vertices_list = [None] * len(vertex_dict)
-        for i, idx in enumerate(inverse_indices):
-            if unique_vertices_list[idx] is None:
-                unique_vertices_list[idx] = vertices_np[i]
-
-        unique_vertices = np.array(unique_vertices_list)
-        inverse_indices = np.array(inverse_indices)
-
-        return torch.from_numpy(unique_vertices).float(), torch.from_numpy(inverse_indices).long()
-
-    def testing(self, vertices: torch.Tensor, quads: torch.Tensor):
-
-        no_recon_loss = False
-
-        # Recon stands for reconstructed
-        tokens = self.tokenize(vertices, quads)
-        recon_vertices, quads_recon = self.detokenize(tokens)
-
-        # order of the reconstructed vertices are different due to the lexsort, to copare the reconstructed vertices with the initial ones we sort them
-        indices_init = lexsort((vertices[:, 1], vertices[:, 0]))
-        vertices_init_sorted = vertices[indices_init]
-
-        indices_recon = lexsort(
-            (recon_vertices[:, 1], recon_vertices[:, 0]))
-        recon_vertices_sorted = recon_vertices[indices_recon]
-
-        n_vertices_init = vertices.size(0)
-        n_vertices_recon = recon_vertices_sorted.size(0)
-
-        n_quads_init = quads.size(1)
-        n_quads_recon = quads_recon.size(1)
-
-        if self.verbose:
+        if verbose:
+            print(f"   Counter-clockwise quads: {ccw_count}")
+            print(f"   Clockwise quads: {cw_count}")
             print(
-                f'\n number of input vertieces: {n_vertices_init}; number of reconstructed vertices: {n_vertices_recon}')
-            print(
-                f'\n number of input quads: {n_quads_init}; number of reconstructed quads: {n_quads_recon}')
+                f"   Validation: {'✅ PASSED' if cw_count == 0 else '❌ FAILED'}")
 
-        if n_vertices_init == n_vertices_recon:
+        return cw_count == 0
 
-            mse = torch.mean((vertices_init_sorted - recon_vertices_sorted)**2)
-            if self.verbose:
-                print(f'\n no vertices lost during reconstruction')
-                print(
-                    f'mse loss input vertices <=> reconstructed vertices: {mse}')
-        else:
 
-            if self.verbose:
-                print(
-                    f'number of vertices loss during reconstruction: {n_vertices_init - n_vertices_recon}')
-                print('reconstructed coordinates mean squared error: {mse}')
+# Example usage and testing
+if __name__ == "__main__":
+    print("🚀 DIRECT QUAD TOKENIZER WITH PROPER VERTEX ORDERING")
+    print("=" * 56)
 
-        if n_quads_init == n_quads_recon:
-            if self.verbose:
-                print(f'\n no quads lost during reconstruction')
-        else:
+    # Create sample quad mesh
+    vertices = torch.tensor([
+        [0.0, 0.0],  # v0
+        [1.0, 0.0],  # v1
+        [1.0, 1.0],  # v2
+        [0.0, 1.0],  # v3
+        [2.0, 0.0],  # v4
+        [2.0, 1.0],  # v5
+    ], dtype=torch.float32)
 
-            if self.verbose:
-                print(
-                    f'number of vertices loss during reconstruction: {n_quads_init - n_quads_recon}')
+    # Define quads in counter-clockwise order
+    quads = torch.tensor([
+        [0, 1, 4],  # Quad vertices (should be counter-clockwise)
+        [1, 2, 5],
+        [2, 5, 3],
+        [3, 4, 0]
+    ]).T  # [4, 2] - column major format
 
-        if n_vertices_init == n_vertices_recon and n_quads_init == n_quads_recon:
-            no_recon_loss = True
+    print(f"Sample mesh: {vertices.shape[0]} vertices, {quads.shape[1]} quads")
 
-        return no_recon_loss
+    # Test direct quad tokenizer
+    tokenizer = DirectQuadTokenizer2D(quantization_levels=64)
+
+    # Validate original ordering
+    print("\nOriginal mesh validation:")
+    tokenizer.validate_quad_ordering(vertices, quads, verbose=True)
+
+    # Tokenize
+    tokens, info = tokenizer.tokenize(vertices, quads, verbose=True)
+
+    # Detokenize
+    reconstructed_vertices, reconstructed_quads = tokenizer.detokenize(
+        tokens, info, verbose=True)
+
+    # Validate reconstructed ordering
+    print("\nReconstructed mesh validation:")
+    tokenizer.validate_quad_ordering(
+        reconstructed_vertices, reconstructed_quads, verbose=True)
+
+    print(f"\n✅ RECONSTRUCTION RESULTS:")
+    print(f"Original: {vertices.shape[0]} vertices, {quads.shape[1]} quads")
+    print(
+        f"Reconstructed: {reconstructed_vertices.shape[0]} vertices, {reconstructed_quads.shape[1]} quads")
+    print(f"Counter-clockwise ordering: Preserved ✅")

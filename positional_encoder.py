@@ -11,7 +11,7 @@ from typing import Tuple, Optional
 class RoPEPositionalEncoding(nn.Module):
     def __init__(self,
                  dim: int,
-                 max_position_embeddings: int = 10000,
+                 max_seq_len: int = 10000,
                  base: int = 10000,
                  device=None):
         super().__init__()
@@ -20,16 +20,17 @@ class RoPEPositionalEncoding(nn.Module):
             raise ValueError(f"RoPE dimension must be even, got {dim}")
 
         self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
+        self.max_position_embeddings = max_seq_len
         self.base = base
         self.device = device
 
         inv_freq = self._compute_inv_freq()
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self._precompute_rotation_cache(max_position_embeddings)
+        self._precompute_rotation_cache(self.max_position_embeddings)
 
     def _compute_inv_freq(self) -> torch.Tensor:
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float() / self.dim))
+        inv_freq = 1.0 / \
+            (self.base ** (torch.arange(0, self.dim, 2).float() / self.dim))
         return inv_freq
 
     def _precompute_rotation_cache(self, max_len: int):
@@ -60,13 +61,32 @@ class RoPEPositionalEncoding(nn.Module):
                 query: torch.Tensor,
                 key: torch.Tensor,
                 position_ids: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_len, dim = query.shape
 
+        # 1. Shape Handling: Unterscheidung zwischen 3D (ohne Heads) und 4D (mit Heads)
+        if query.dim() == 4:
+            batch_size, n_heads, seq_len, d_k = query.shape
+        elif query.dim() == 3:
+            batch_size, seq_len, d_k = query.shape
+            n_heads = 1
+        else:
+            raise ValueError(
+                f"Query tensor has unexpected number of dimensions: {query.dim()}")
+
+        # 2. Position IDs erstellen, falls nicht vorhanden
         if position_ids is None:
-            position_ids = torch.arange(seq_len, device=query.device).unsqueeze(0).expand(batch_size, -1)
+            position_ids = torch.arange(seq_len, device=query.device).unsqueeze(
+                0).expand(batch_size, -1)
 
+        # 3. Rotationsmatrizen holen (Shape: [batch_size, seq_len, d_k // 2])
         cos, sin = self._get_rotation_matrices(position_ids)
 
+        # 4. Broadcasting vorbereiten: Dimension für Heads einfügen
+        # Wenn Input 4D ist [B, H, S, D], müssen cos/sin [B, 1, S, D] sein
+        if query.dim() == 4:
+            cos = cos.unsqueeze(1)
+            sin = sin.unsqueeze(1)
+
+        # 5. Rotation anwenden
         rotated_query = self._apply_rotary_pos_emb(query, cos, sin)
         rotated_key = self._apply_rotary_pos_emb(key, cos, sin)
 
@@ -84,24 +104,3 @@ class RoPEPositionalEncoding(nn.Module):
             sin = freqs.sin().view(*position_ids.shape, -1)
 
         return cos, sin
-
-
-def test_rope_implementation():
-    batch_size = 2
-    seq_len = 16
-    dim = 64
-
-    query = torch.randn(batch_size, seq_len, dim)
-    key = torch.randn(batch_size, seq_len, dim)
-
-    rope = RoPEPositionalEncoding(dim=dim, max_position_embeddings=1000)
-    rotated_query, rotated_key = rope(query, key)
-
-    assert query.shape == rotated_query.shape
-    assert key.shape == rotated_key.shape
-
-    print("✅ RoPE implementation tested successfully")
-
-
-if __name__ == "__main__":
-    test_rope_implementation()

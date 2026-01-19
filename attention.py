@@ -2,14 +2,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from positional_encoder import RoPEPositionalEncoding as RoPE
+# from rotary_positional_embedding import RotaryPositionalEmbedding as RoPE
+from typing import Optional, Tuple, Dict
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model=512, n_heads=8, dropout=0.1):
+    def __init__(self, d_model=512, n_heads=8, dropout=0.1, is_cross_attention: Optional[bool] = False, max_position: Optional[int] = 10000):
         super().__init__()
 
         assert d_model % n_heads == 0, "d_model muss durch n_heads teilbar sein"
-
+        self.is_cross_attention = is_cross_attention
         self.d_model = d_model
         self.n_heads = n_heads
         self.d_k = d_model // n_heads  # Dimension pro Head
@@ -23,8 +26,9 @@ class MultiHeadAttention(nn.Module):
         self.w_o = nn.Linear(d_model, d_model)
 
         self.dropout = nn.Dropout(dropout)
+        self.rope = RoPE(self.d_k, max_seq_len=max_position)
 
-    def forward(self, q,k,v, mask=None):
+    def forward(self, q, k, v, mask=None, position_ids=None):
         """
         Args:
             q,k,v: [batch_size, seq_len, d_model] oder [seq_len, d_model]
@@ -43,31 +47,52 @@ class MultiHeadAttention(nn.Module):
             single_sequence = False
 
         batch_size, seq_len, d_model = q.shape
-
         # 1. Linear transformations for Q, K, V
         Q = self.w_q(q)  # [batch_size, seq_len, d_model]
         K = self.w_k(k)  # [batch_size, seq_len, d_model]
         V = self.w_v(v)  # [batch_size, seq_len, d_model]
+        # 2. Reshape for multi-head attention (Splitten der Heads)
 
-        # 2. Reshape for multi-head attention
         # [batch_size, seq_len, d_model] -> [batch_size, n_heads, seq_len, d_k]
-        Q = Q.view(batch_size, seq_len, self.n_heads, self.d_k).transpose(1, 2)
-        K = K.view(batch_size, seq_len, self.n_heads, self.d_k).transpose(1, 2)
-        V = V.view(batch_size, seq_len, self.n_heads, self.d_k).transpose(1, 2)
+        # Q splitten
+        b_q, len_q, d_model_q = Q.shape
+        Q_split = Q.view(b_q, len_q, self.n_heads, self.d_k).transpose(1, 2)
 
-        # 3. Scaled dot-product attention
-        attention_output = self.scaled_dot_product_attention(Q, K, V, mask)
+        # K splitten (nutzt len_k statt len_q)
+        b_k, len_k, d_model_k = K.shape
+        K_split = K.view(b_k, len_k, self.n_heads, self.d_k).transpose(1, 2)
 
-        # 4. Concatenate heads
-        # [batch_size, n_heads, seq_len, d_k] -> [batch_size, seq_len, d_model]
+        # V splitten (nutzt len_v statt len_q)
+        b_v, len_v, d_model_v = V.shape
+        V_split = V.view(b_v, len_v, self.n_heads, self.d_k).transpose(1, 2)
+        # 3. RoPE anwenden
+        # Hinweis: Stellen Sie sicher, dass Ihre RoPE-Implementierung damit klarkommt,
+        # dass Q und K unterschiedliche Längen haben, falls position_ids übergeben werden.
+
+        if self.is_cross_attention:
+            # Bei Cross-Attention: Nur Query rotieren
+
+            rotated_Q = Q_split  # Key NICHT rotieren
+
+            rotated_K = K_split  # Key NICHT rotieren
+        else:
+            # Bei Self-Attention: Beide rotieren
+            rotated_Q, rotated_K = self.rope(
+                Q_split, K_split, position_ids=position_ids)
+
+        # 4. Attention
+        # Output wird Länge von Q haben (len_q)
+        attention_output = self.scaled_dot_product_attention(
+            rotated_Q, rotated_K, V_split, mask)
+
+        # 5. Concatenate
+        # Hier nutzen wir wieder len_q, da der Output dem Query folgt
         attention_output = attention_output.transpose(1, 2).contiguous().view(
-            batch_size, seq_len, d_model
+            b_q, len_q, self.d_model
         )
 
-        # 5. Final linear projection
         output = self.w_o(attention_output)
 
-        # Remove batch dimension if input was single sequence
         if single_sequence:
             output = output.squeeze(0)
 
@@ -99,4 +124,3 @@ class MultiHeadAttention(nn.Module):
         output = torch.matmul(attention_weights, V)
 
         return output
-
