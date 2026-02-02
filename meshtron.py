@@ -27,6 +27,7 @@ class Meshtron(nn.Module):
                  input_dim: int = 2,
                  min_face_count: int = 2000,
                  max_face_count: int = 8000,
+                 n_heads: int = 8,
                  stage_layers: Tuple[int, int, int,
                                      int, int] = (4, 8, 12, 16, 20),
                  verbose=True):
@@ -34,7 +35,7 @@ class Meshtron(nn.Module):
 
         if verbose == True:
             print('init Embedding')
-
+        self.n_heads = n_heads
         self.embedder = Embedding(
             vocab_size=vocab_size,
             d_model=d_model,
@@ -44,7 +45,7 @@ class Meshtron(nn.Module):
         if verbose == True:
             print('init PerceiverPointEncoder')
 
-        sel.point_encoder = PerceiverPointEncoder(
+        self.point_encoder = PerceiverPointEncoder(
             d_model=d_model,
             input_dim=input_dim,
             n_latents=n_latents
@@ -64,7 +65,7 @@ class Meshtron(nn.Module):
 
         self.transformer = HourglassTransformer(
             d_model=d_model,
-            n_heads=8,
+            n_heads=self.n_heads,
             stage_layers=stage_layers,
             d_ff=4 * d_model,
             dropout=0.1,
@@ -123,7 +124,8 @@ class Meshtron(nn.Module):
         """
         self.eval()
 
-        generated = torch.tensor(start_tokens, device=device)
+        generated = torch.tensor(start_tokens, device=device).clone().detach()
+        # generated = start_tokens.clone().detach().device(device)
 
         # Encode Point Cloud einmal
         latent_points = self.point_encoder(point_cloud.to(device))

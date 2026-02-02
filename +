@@ -29,7 +29,6 @@ class Trainer:
         stage_layers=[4, 8, 12, 16, 20],
         gradient_accumulation=None,
         max_val_samples=10,
-        n_heads=8,
         window_size=None
 
     ):
@@ -39,7 +38,6 @@ class Trainer:
         self.d_model = d_model
         self.train_val_ratio = 0.80
 
-        self.n_heads = n_heads
         self.gradient_accumulation = gradient_accumulation
         self.accumulator = 0
         self.window_size = window_size
@@ -56,8 +54,7 @@ class Trainer:
         self.coord_dim = 2  # dimension of point_cloud coordinates
         self.max_val_samples = max_val_samples
 
-        self.tokenizer = Tokenizer2D(
-            quantization_levels=quantization, verbose=self.verbose)
+        self.tokenizer = Tokenizer2D(quantization_levels=quantization)
 
         self.train_loader, self.val_loader, self.max_length, self.max_face_count, self.min_face_count = self.getData(
             self.train_val_ratio, self.data_path)
@@ -66,12 +63,11 @@ class Trainer:
             print('init meshtron')
         self.model = Meshtron(vocab_size=self.quantization+3,
                               d_model=self.d_model,
-                              max_seq_length=self.max_length,
+                              max_seq_length=self.max_length+100,
                               n_latents=self.n_latents,
                               input_dim=self.coord_dim,
                               min_face_count=self.min_face_count,
                               max_face_count=self.max_face_count,
-                              n_heads=self.n_heads,
                               stage_layers=self.stage_layers,
                               verbose=self.verbose).to(self.device)
 
@@ -85,7 +81,7 @@ class Trainer:
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer, num_epochs)
 
-        self.notation = f'q_{self.quantization}_d_model_{self.d_model}_n_latents_{self.n_latents}_batch_size_{self.batch_size}_n_heads_{self.n_heads}_window_size_{window_size}_stage_layers_' + \
+        self.notation = f'q_{self.quantization}_d_model_{self.d_model}_n_latents_{self.n_latents}_batch_size{self.batch_size}_stage_layers_' + \
             '_'.join(str(s) for s in self.stage_layers)
 
         self.checkpoint_dir = Path(checkpoint_dir) / self.notation
@@ -94,23 +90,21 @@ class Trainer:
         # Training state
         self.best_val_loss = float('inf')
         self.patience_counter = 0
-        self.max_patience = 75
+        self.max_patience = 150
         self.training_history = {
             'train_loss': [],
-            'val_loss': [],
-            'epoch': []
+            'val_loss': []
         }
 
         self.current_epoch = 0
 
-        if True:
+        if self.verbose == True:
 
             print("\ntraining configuration")
             print(f"\ndevice: {self.device}")
             print(f"\nquantization: {self.quantization}")
             print(f"\nd_model: {self.d_model}")
             print(f"\nn_latents: {self.n_latents}")
-            print(f"\nn_heads: {self.n_heads}")
             print(f"\nbatch_size: {self.batch_size}")
             print(f"\nnum_epochs: {self.num_epochs}")
             print(f"\nlearning_rate: {self.learning_rate}")
@@ -139,7 +133,6 @@ class Trainer:
             self.training_history['train_loss'].append(
                 current_train_loss)
             self.training_history['val_loss'].append(current_val_loss)
-            self.training_history['epoch'].append(i)
 
             if self.patience_counter > self.max_patience:
                 if self.verbose == True:

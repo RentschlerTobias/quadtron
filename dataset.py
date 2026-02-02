@@ -9,7 +9,7 @@ class MeshData(Dataset):
     Dataset für Meshtron 
     """
 
-    def __init__(self, meshes, tokenizer, max_seq_length=None, n_sample_points=1200, verbose=True):
+    def __init__(self, meshes, tokenizer, max_seq_length=None, n_sample_points=1500, verbose=True, boundary_points_only=False):
         """
         meshes: Liste von Mesh-Objekten 
         tokenizer:  Tokenizer2D
@@ -20,7 +20,7 @@ class MeshData(Dataset):
         self.data = []
         self.point_clouds = []
         self.face_count = []
-
+        self.boundary_points_only = boundary_points_only
         if verbose == True:
             print(f"start tokenizing")
         for i in tqdm(range(len(meshes)), desc="meshes"):
@@ -28,11 +28,6 @@ class MeshData(Dataset):
             vertices = mesh.x[:, 0:2]  # 2D vertices
             faces = mesh.faces
 
-            # [Note] qick and dirty preselection, needs to be deleted
-
-            # if faces.size(1) > 220 or faces.size(1) < 200:
-            #     continue
-            #
             tokens = tokenizer.tokenize(vertices, faces)
             point_cloud = self.get_point_cloud(mesh, n_sample_points)
             num_faces = faces.size(1)
@@ -60,8 +55,9 @@ class MeshData(Dataset):
         num_boundary_points = boundary_points.size(0)
         num_interior_points = interior_points.size(0)
 
-        point_cloud = torch.ones([n_sample_points, 2]) * (-1)
+        remaining = n_sample_points - num_boundary_points
 
+        point_cloud = torch.ones([n_sample_points, 2]) * (-1)
         if num_boundary_points >= n_sample_points:
             # Sample nur aus Boundary Points
             random_idx = torch.randint(
@@ -69,16 +65,33 @@ class MeshData(Dataset):
             point_cloud[:, :] = boundary_points[random_idx, :]
 
         else:
-            point_cloud[:num_boundary_points, :] = boundary_points
 
-            remaining_slots = n_sample_points - num_boundary_points
-            if num_interior_points > 0 and remaining_slots > 0:
-                num_random_points = min(remaining_slots, num_interior_points)
+            points = []
+            points.append(boundary_points)
+
+            if num_interior_points >= remaining:
+
                 random_idx = torch.randint(
-                    0, num_interior_points, [num_random_points])
-                random_points = interior_points[random_idx, :]
-                point_cloud[num_boundary_points:num_boundary_points +
-                            num_random_points, :] = random_points
+                    0, num_interior_points, (remaining,)
+                )
+                points.append(interior_points[random_idx, :])
+
+            else:
+                repeat_factor = (remaining + num_interior_points -
+                                 1) // num_interior_points  # ceil division
+                interior_repeated = interior_points.repeat(repeat_factor, 1)
+
+                noise_strength = 0.001
+                noise = torch.rand_like(interior_repeated)*noise_strength
+                noisy_interior_points = interior_repeated + noise
+                num_noisy_points = noisy_interior_points.size(0)
+
+                random_idx = torch.randint(
+                    0, num_noisy_points, (remaining,)
+                )
+                points.append(noisy_interior_points[random_idx, :])
+
+            point_cloud = torch.cat(points, dim=0)
 
         return point_cloud
 

@@ -1,31 +1,45 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-
+import plotting_tools
 from trainer import Trainer
 import torch
+from tokenizer import Tokenizer2D
+from tqdm import tqdm
+from collections import defaultdict
+
 
 # Initialisiere die Variable mit einem sehr großen Wert
 # path0 = '../data/quad_data.pt'
 
-path0 = '../data/unstructured_quad_meshes_v2.pt'
+path_meshes = '../data/structured_quad_meshes_pre_selected.pt'
+
 quantization = 1024
-d_model = 256
-n_latents = 256
-batch_size = 2
-num_epochs = 5
-learning_rate = 1e-3
-stage_layers = [2, 1, 1, 1, 1]
-window_size = None
-trainer = Trainer(data_path=path0, num_epochs=75, learning_rate=learning_rate, batch_size=batch_size, quantization=quantization, d_model=d_model,
-                  gradient_accumulation=4, window_size=window_size, stage_layers=stage_layers)
-path = f'./checkpoints/q_{quantization}_d_model_{d_model}_n_latents{n_latents}_batch_size{batch_size}_epoch_{num_epochs}.pt'
+d_model = 1024
+n_latents = 512
+batch_size = 16
+num_epochs = 500
+learning_rate = 1e-4
+stage_layers = [4, 4, 4, 4, 4]
+window_size = 600
+gradient_accumulation = 2
+n_heads = 8
+epoch_saving_point = 20
+
+verbose = False
+trainer = Trainer(data_path=path_meshes, num_epochs=num_epochs, learning_rate=learning_rate, batch_size=batch_size, quantization=quantization, d_model=d_model, n_latents=n_latents,
+                  gradient_accumulation=gradient_accumulation, window_size=window_size, n_heads=n_heads, stage_layers=stage_layers, verbose=verbose)
+
+# path = f'./checkpoints/saved_trainings/q_{quantization}_d_model_{d_model}_n_latents_{n_latents}_batch_size{batch_size}_stage_layers_' + \
+#     '_'.join(str(s) for s in stage_layers)+f'/epoch_{epoch_saving_point}.pt'
+#
+path = f'./checkpoints/q_{quantization}_d_model_{d_model}_n_latents_{n_latents}_batch_size_{batch_size}_n_heads_{n_heads}_window_size_{window_size}_stage_layers_' + \
+    '_'.join(str(s) for s in stage_layers)+f'/epoch_{epoch_saving_point}.pt'
 
 
-# path = './checkpoints/q_1024_d_model_256_n_latents256_batch_size4_epoch_121.pt'
 checkpoint = torch.load(path, weights_only=True)
-state = checkpoint['model_state_dict']
 
+state = checkpoint['model_state_dict']
 trainer.model.load_state_dict(state)
 
 data = next(iter(trainer.val_loader))
@@ -35,61 +49,56 @@ target_tokens = data['target_tokens'][0:1]
 point_cloud = data['point_cloud'][0:1]
 face_count = data['face_count'][0:1]
 start = input_tokens[0:1, 0:8]
-
-
-target_tokens[0, :100]
-input_tokens[0, :100]
-
-start.size()
-
-input_tokens.size()
-start.size()
+face_count
 point_cloud.size()
-face_count.size()
+n_faces = face_count
+# n_faces[0] = 24
 
 generated_tokens = trainer.model.generate(
     point_cloud=point_cloud,
-    face_count=face_count,
+    face_count=n_faces,
     start_tokens=start,
-    max_length=2500
+    max_length=1500
 )
-generated_tokens[:1000]
-
-generated_tokens.size()
-input_tokens.size()
-info = trainer.tokenizer.info
-
-generated_tokens.size()
-vertices, quads_tensor = trainer.tokenizer.detokenize(generated_tokens, info)
 
 
-# vertices, quads_tensor = trainer.tokenizer.detokenize(input_tokens[0], info)
+vertices, quads = trainer.tokenizer.detokenize(generated_tokens)
+plotting_tools.plt_mesh(
+    vertices, quads, point_cloud=point_cloud[0], output_file='./figures/test_mesh.png')
 
 
-vertices.size()
+quads.size()
+
+vertices_true, quads_true = trainer.tokenizer.detokenize(input_tokens[0])
+plotting_tools.plt_mesh(vertices_true, quads_true,
+                        output_file='./figures/true_mesh.png')
+
+plotting_tools.plt_mesh(mesh.x[:, 0:2], mesh.faces,
+                        output_file='./true_mesh.png')
+plotting_tools.plt_mesh(vertices, quads, point_cloud=points,
+                        output_file='./test_mesh.png')
 
 
-figsize = (5, 5)
+def main():
 
-plt.figure(figsize=figsize)
-output_file = './generated_mesh.png'
-for face in quads_tensor.T:
-    coords = vertices[face].numpy()  # shape (4, 2)
-    color = np.random.rand(3,)  # Random RGB color for each face
-    _ = plt.fill(coords[:, 0], coords[:, 1], color=color,
-                 edgecolor='gray', linewidth=0.5)
-plt.axis([0, 1, 0, 1])
-plt.savefig(output_file, dpi=300, transparent=True)
+    path_meshes = '../data/structured_quad_meshes_pre_selected.pt'
+
+    quantization = 2048
+    d_model = 512
+    n_latents = 2*d_model
+    batch_size = 6
+    num_epochs = 75
+    learning_rate = 1e-4
+    stage_layers = [2, 2, 2, 2, 2]
+    window_size = None
+    gradient_accumulation = 2
+    n_heads = 8
+
+    self.trainer = Trainer(data_path=path_meshes, num_epochs=num_epochs, learning_rate=learning_rate, batch_size=batch_size, quantization=quantization, d_model=d_model, n_latents=n_latents,
+                           gradient_accumulation=gradient_accumulation, window_size=window_size, n_heads=n_heads, stage_layers=stage_layers)
+
+    self.trainer.training()
 
 
-figsize = (5, 5)
-plt.figure(figsize=figsize)
-
-v = vertices.detach().numpy()  # [N, 2]
-
-output_file = './generated_vertices.png'
-plt.figure(figsize=(6, 6))
-plt.scatter(v[:, 0], v[:, 1], s=5)
-plt.axis([0, 1, 0, 1])
-plt.show()
-plt.savefig(output_file, dpi=300, transparent=True)
+if __name__ == '__main__':
+    main()

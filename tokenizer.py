@@ -7,7 +7,7 @@ import math
 
 class Tokenizer2D:
 
-    def __init__(self, quantization_levels, verbose=False, max_length_padding: Optional[int] = None):
+    def __init__(self, quantization_levels, verbose=False, max_length_padding: Optional[int] = None, n_start_end_tokens_repeat: Optional[int] = 8):
 
         self.verbose = verbose
         # 2D Quads (4 vertices, 2 coordinates each vertex)
@@ -17,7 +17,7 @@ class Tokenizer2D:
         self.pad_token = quantization_levels + 2
         self.vocab_size = quantization_levels + 3
         self.quantization_levels = quantization_levels
-        self.n_start_end_tokens_repeat = 1
+        self.n_start_end_tokens_repeat = n_start_end_tokens_repeat
         # stores the coorinate bounds, needed to transform the coordinates back from the tokens
         self.bounds = None
         self.max_length_token_sequence = 0.0
@@ -71,6 +71,12 @@ class Tokenizer2D:
         # Build token sequence
         tokens = self._build_token_sequence(quantized_coords)
 
+        if self.max_length_token_sequence < len(tokens):
+            self.max_length_token_sequence = len(tokens)
+
+        if self.min_length_token_sequence > len(tokens):
+            self.min_length_token_sequence = len(tokens)
+
         if self.max_length_padding is not None:
 
             if len(tokens) > self.max_length_padding:
@@ -92,12 +98,6 @@ class Tokenizer2D:
 
                 tokens += [self.pad_token]*max(0, fill_length)
 
-        if self.max_length_token_sequence < len(tokens):
-            self.max_length_token_sequence = len(tokens)
-
-        if self.min_length_token_sequence > len(tokens):
-            self.min_length_token_sequence = len(tokens)
-
         if self.verbose:
             print(f"\n Finisched tokenization")
             print(f'\n Transformed mesh into {len(tokens)} tokens')
@@ -117,8 +117,10 @@ class Tokenizer2D:
             coords_quad = vertices[quad]  # [4, 2] vertex coordinates
 
             # First sort lexicographically by (y, x)
-            yx_coords = coords_quad[:, [1, 0]]  # swap to [y, x]
-            sort_indices = lexsort(yx_coords.T)
+            # yx_coords = coords_quad[:, [1, 0]]  # swap to [y, x]
+            xy_coords = coords_quad[:, [0, 1]]
+            # sort_indices = lexsort(yx_coords.T)
+            sort_indices = lexsort(xy_coords.T)
             lexsorted_quad = quad[sort_indices]
             lexsorted_coords = vertices[lexsorted_quad]
 
@@ -131,8 +133,9 @@ class Tokenizer2D:
 
         # Step 2: Sort quads by their first vertex coordinates
         first_vertices = vertices[ordered_quads[:, 0]]  # [n_quads, 2]
-        first_yx = first_vertices[:, [1, 0]]  # [y, x]
-        quad_order = lexsort(first_yx.T)
+        # first_yx = first_vertices[:, [1, 0]]  # [y, x]
+        # quad_order = lexsort(first_yx.T)
+        quad_order = lexsort(first_vertices.T)
 
         final_ordered = ordered_quads[quad_order]  # [n_quads, 4]
 
@@ -207,7 +210,8 @@ class Tokenizer2D:
         normalized[:, 1] = (coords[:, 1] - y_min) / y_range
 
         # Quantize to integers [0, quantization_levels-1]
-        quantized = (normalized * (self.quantization_levels - 1)).long()
+        quantized = torch.round(
+            normalized * (self.quantization_levels - 1)).long()
         quantized = torch.clamp(quantized, 0, self.quantization_levels - 1)
 
         if self.verbose:
@@ -227,7 +231,7 @@ class Tokenizer2D:
 
         # Add coordinate tokens (each coordinate pair becomes 2 tokens)
         for coord_pair in quantized_coords:
-            tokens.extend([int(coord_pair[0]), int(coord_pair[1])])
+            tokens.extend([int(coord_pair[1]), int(coord_pair[0])])
 
         # End tokens
         tokens.extend([self.end_token] * self.n_start_end_tokens_repeat)
@@ -269,9 +273,10 @@ class Tokenizer2D:
         x_min, y_min, x_max, y_max = bounds
         normalized = coord_pairs.float() / (self.quantization_levels - 1)
 
+        # Switch x,y coordinates, cuase they are y,x due to the tokenization
         all_vertices = torch.zeros_like(normalized)
-        all_vertices[:, 0] = normalized[:, 0] * (x_max - x_min) + x_min
-        all_vertices[:, 1] = normalized[:, 1] * (y_max - y_min) + y_min
+        all_vertices[:, 0] = normalized[:, 1] * (x_max - x_min) + x_min
+        all_vertices[:, 1] = normalized[:, 0] * (y_max - y_min) + y_min
 
         # Step 3: Gruppierung in Quads
         num_quads = len(all_vertices) // 4
@@ -284,7 +289,7 @@ class Tokenizer2D:
         all_vertices_flat = quad_vertices.reshape(-1, 2)
         vertices_np = all_vertices_flat.numpy()
         vertices, vertex_mapping = self.unique_vertices_hash(
-            all_vertices_flat, decimals=24)
+            all_vertices_flat, decimals=32)
 
         #
         # vertices_rounded = np.round(vertices_np, decimals=32)
@@ -432,7 +437,7 @@ class Tokenizer2D:
             if self.verbose:
                 print(f'\n no vertices lost during reconstruction')
                 print(
-                    f'mse loss input vertices <=> reconstructed vertices: {mse}')
+                    f'mse loss input vertices <=> reconstructed vertices: {mse.item()}')
         else:
 
             if self.verbose:

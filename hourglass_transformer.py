@@ -128,14 +128,20 @@ class HourglassTransformerBlock(nn.Module):
         return x
 
     def create_manual_mask(self, seq_len, device):
-        mask = torch.ones((seq_len, seq_len), device=device)
-        # triu(1) behält das obere Dreieck AB DER 1. DIAGONALEN (also ohne die Mitte)
-        mask = torch.triu(mask, diagonal=1)
-        # Ersetze 1en mit -inf und 0en mit 0
+        mask = torch.triu(torch.ones(
+            (seq_len, seq_len), device=device), diagonal=1)
         mask = mask.masked_fill(mask == 1, float('-inf'))
-        # Optional: Nullen explizit setzen (oft nicht nötig, da masked_fill reicht)
-        mask = mask.masked_fill(mask == 0, float(0.0))
-        return mask
+        # Erweitere für batch und heads: [1, 1, seq_len, seq_len]
+        return mask.unsqueeze(0).unsqueeze(0)
+    # def create_manual_mask(self, seq_len, device):
+    #     mask = torch.ones((seq_len, seq_len), device=device)
+    #     # triu(1) behält das obere Dreieck AB DER 1. DIAGONALEN (also ohne die Mitte)
+    #     mask = torch.triu(mask, diagonal=1)
+    #     # Ersetze 1en mit -inf und 0en mit 0
+    #     mask = mask.masked_fill(mask == 1, float('-inf'))
+    #     # Optional: Nullen explizit setzen (oft nicht nötig, da masked_fill reicht)
+    #     mask = mask.masked_fill(mask == 0, float(0.0))
+    #     return mask
 
 
 class CrossAttentionCondition(nn.Module):
@@ -162,7 +168,7 @@ class CrossAttentionCondition(nn.Module):
     def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, mask: Optional[torch.Tensor] = None, position_ids: Optional[torch.Tensor] = None) -> torch.Tensor:
         # Self-attention with residual
         attn_out = self.attention(
-            query, key, value, mask=mask, position_ids=position_ids)
+            query, key, value, mask=None, position_ids=position_ids)
         x = self.norm1(query + attn_out)
 
         # Feed-forward with residual
@@ -302,62 +308,63 @@ class HourglassTransformer(nn.Module):
         stage1_conditioned_out = self.stage1_conditioned(
             stage1_out, latent_condition, latent_condition, mask=None, position_ids=position_ids)
         # Store for residual connection
+
+        residual1 = stage1_conditioned_out
+        residual1_raw = stage1_conditioned_out
+        residual1 = F.pad(residual1_raw, (0, 0, 1, 0))[:, :-1, :]
+
+        # Shortening 1: Coordinate -> Vertex (2x reduction)
+        # tokens [x0,y0,x1,y1,x2,y2,x3,y3] => [y0,y1,y2,y3]
+        shortened1 = self.shortening1(stage1_conditioned_out)
+        position_ids_shortened1 = position_ids[:, self.factor1-1::self.factor1]
+        # Stage 2: Coordinate level
+        stage2_out = self.stage2(
+            shortened1, is_casual, position_ids_shortened1)
+        stage2_conditioned_out = self.stage2_conditioned(
+            stage2_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened1)
+
+        # Store for residual connection
+        # residual2 = stage2_conditioned_out
+        residual2_raw = stage2_conditioned_out
+        residual2 = F.pad(residual2_raw, (0, 0, 1, 0))[:, :-1, :]
+
+        # Shortening 2: Vertex -> Face (4x reduction)
+        shortened2 = self.shortening2(stage2_conditioned_out)
+        position_ids_shortened2 = position_ids_shortened1[:,
+                                                          self.factor2-1::self.factor2]
+        # Stage 3: Face level
+        stage3_out = self.stage3(
+            shortened2, is_casual, position_ids_shortened2)
+        stage3_conditioned_out = self.stage3_conditioned(
+            stage3_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened2)
+
+        # Upsampling 2: Face -> Vertex
+        upsampled2 = self.upsampling2(
+            stage3_conditioned_out, target_len=residual2.shape[1])
         #
-        # residual1 = stage1_conditioned_out
-        # residual1_raw = stage1_conditioned_out
-        # residual1 = F.pad(residual1_raw, (0, 0, 1, 0))[:, :-1, :]
-        #
-        # # Shortening 1: Coordinate -> Vertex (2x reduction)
-        # # tokens [x0,y0,x1,y1,x2,y2,x3,y3] => [y0,y1,y2,y3]
-        # shortened1 = self.shortening1(stage1_conditioned_out)
-        # position_ids_shortened1 = position_ids[:, self.factor1-1::self.factor1]
-        # # Stage 2: Coordinate level
-        # stage2_out = self.stage2(
-        #     shortened1, is_casual, position_ids_shortened1)
-        # stage2_conditioned_out = self.stage2_conditioned(
-        #     stage2_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened1)
-        #
-        # # Store for residual connection
-        # # residual2 = stage2_conditioned_out
-        # residual2_raw = stage2_conditioned_out
-        # residual2 = F.pad(residual2_raw, (0, 0, 1, 0))[:, :-1, :]
-        #
-        # # Shortening 2: Vertex -> Face (4x reduction)
-        # shortened2 = self.shortening2(stage2_conditioned_out)
-        # position_ids_shortened2 = position_ids_shortened1[:,
-        #                                                   self.factor2-1::self.factor2]
-        # # Stage 3: Face level
-        # stage3_out = self.stage3(
-        #     shortened2, is_casual, position_ids_shortened2)
-        # stage3_conditioned_out = self.stage3_conditioned(
-        #     stage3_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened2)
-        #
-        # # Upsampling 2: Face -> Vertex
-        # upsampled2 = self.upsampling2(
-        #     stage3_conditioned_out, target_len=residual2.shape[1])
-        # #
-        #
-        # # Add residual connection
+
+        # Add residual connection
         # combined2 = upsampled2  # + self.residual_proj2(residual2)
-        # # combined2 = upsampled2_shifted + residual2
-        #
-        # # Stage 4: Reconsturcted Vertex level
-        # stage4_out = self.stage4(combined2, is_casual, position_ids_shortened1)
-        # stage4_conditioned_out = self.stage4_conditioned(
-        #     stage4_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened2)
-        #
-        # # Upsampling 1: Vertex -> Coordinate
-        # upsampled1 = self.upsampling1(
-        #     stage4_conditioned_out, target_len=seq_len)
-        #
-        # # Add residual connection
+        combined2 = upsampled2 + residual2
+
+        # Stage 4: Reconsturcted Vertex level
+        stage4_out = self.stage4(combined2, is_casual, position_ids_shortened1)
+        stage4_conditioned_out = self.stage4_conditioned(
+            stage4_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened2)
+
+        # Upsampling 1: Vertex -> Coordinate
+        upsampled1 = self.upsampling1(
+            stage4_conditioned_out, target_len=seq_len)
+
+        # Add residual connection
         # combined1 = upsampled1  # + self.residual_proj1(residual1)
-        # # combined1 = upsampled1_shifted + residual1
-        #
-        # # Stage 5: Reconsturcted Coordinate level
-        # stage5_out = self.stage5(combined1, is_casual, position_ids)
-        # output_conditioned = self.stage5_conditioned(
-        #     stage5_out, latent_condition, latent_condition, mask=None, position_ids=position_ids)
-        #
-        # return output_conditioned
+        # combined1 = upsampled1_shifted + residual1
+        combined1 = upsampled1 + residual1
+
+        # Stage 5: Reconsturcted Coordinate level
+        stage5_out = self.stage5(combined1, is_casual, position_ids)
+        output_conditioned = self.stage5_conditioned(
+            stage5_out, latent_condition, latent_condition, mask=None, position_ids=position_ids)
+
+        return output_conditioned
         # return stage1_conditioned_out

@@ -107,16 +107,14 @@ class MultiHeadAttention(nn.Module):
         Returns:
             output: [batch_size, n_heads, seq_len, d_k]
         """
+
         d_k = Q.size(-1)
 
-        # Compute attention scores
         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(d_k)
 
-        # Apply mask if not provided
         if mask is not None:
-            scores = scores.masked_fill(mask == 0, -1e9)
-
-        # Softmax
+            scores = scores + mask
+            # Softmax
         attention_weights = F.softmax(scores, dim=-1)
         attention_weights = self.dropout(attention_weights)
 
