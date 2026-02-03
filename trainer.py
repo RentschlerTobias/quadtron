@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from meshtron import Meshtron
-from tokenizer import Tokenizer2D
+from tokenizer_v2 import Tokenizer2D
 from dataset import MeshData
 
 
@@ -30,7 +30,8 @@ class Trainer:
         gradient_accumulation=None,
         max_val_samples=10,
         n_heads=8,
-        window_size=None
+        window_size=None,
+        sorting_strategy=0
 
     ):
         self.verbose = verbose
@@ -56,8 +57,10 @@ class Trainer:
         self.coord_dim = 2  # dimension of point_cloud coordinates
         self.max_val_samples = max_val_samples
 
+        self.sorting_strategy = sorting_strategy
+
         self.tokenizer = Tokenizer2D(
-            quantization_levels=quantization, verbose=self.verbose)
+            quantization_levels=quantization, verbose=self.verbose, sorting_strategy=self.sorting_strategy)
 
         self.train_loader, self.val_loader, self.max_length, self.max_face_count, self.min_face_count = self.getData(
             self.train_val_ratio, self.data_path)
@@ -85,7 +88,7 @@ class Trainer:
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer, num_epochs)
 
-        self.notation = f'q_{self.quantization}_d_model_{self.d_model}_n_latents_{self.n_latents}_batch_size_{self.batch_size}_n_heads_{self.n_heads}_window_size_{window_size}_stage_layers_' + \
+        self.notation = f'q_{self.quantization}_d_model_{self.d_model}_n_latents_{self.n_latents}_batch_size_{self.batch_size}_n_heads_{self.n_heads}_window_size_{window_size}_sorting_strategy_{sorting_strategy}_stage_layers_' + \
             '_'.join(str(s) for s in self.stage_layers)
 
         self.checkpoint_dir = Path(checkpoint_dir) / self.notation
