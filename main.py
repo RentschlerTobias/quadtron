@@ -6,20 +6,20 @@ import torch
 def main():
 
     # path_meshes = '../data/unstructured_quad_meshes_v2.pt'
-    path_meshes = '../data/structured_quad_meshes_pre_selected.pt'
+    path_meshes = '../data/structured_quad_meshes_pre_selected_v2.pt'
 
     quantization = 2048
-    d_model = 2048
-    n_latents = d_model
-    batch_size = 8
-    num_epochs = 50
+    d_model = 1024
+    n_latents = 2*d_model
+    batch_size = 16
+    num_epochs = 100
     learning_rate = 1e-4
-    stage_layers = [4, 4, 4, 4, 4]
-    window_size = None
-    gradient_accumulation = 2
+    stage_layers = [6, 4, 2, 4, 6]
+    window_size = 200
+    gradient_accumulation = None
     n_heads = 8
     verbose = False
-    sorting_strategy = 0
+    sorting_strategy = 1
 
     trainer = Trainer(data_path=path_meshes, num_epochs=num_epochs, learning_rate=learning_rate, batch_size=batch_size, quantization=quantization, d_model=d_model, n_latents=n_latents,
                       gradient_accumulation=gradient_accumulation, window_size=window_size, n_heads=n_heads, stage_layers=stage_layers, verbose=verbose, sorting_strategy=sorting_strategy)

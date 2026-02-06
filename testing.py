@@ -8,61 +8,79 @@ from tokenizer_v2 import Tokenizer2D as tokenizer_v2
 from tokenizer import Tokenizer2D as tokenizer_v1
 from tqdm import tqdm
 from collections import defaultdict
+#
+# path_meshes = '../data/structured_quad_meshes_pre_selected.pt'
+# meshes = torch.load(path_meshes)
+# quantization = 1024
+# d_model =  256
+# n_latents = 4*d_model
+# batch_size = 24
+# num_epochs = 50
+# learning_rate = 1e-4
+# stage_layers = [4, 4, 4, 4, 4]
+# # stage_layers = [2, 2, 2, 2, 2]
+# window_size = 600
+# gradient_accumulation = 2
+# n_heads = 16
+#
+# sorting_strategy = 0
+# epoch_saving_point = 94
 
 
 # Initialisiere die Variable mit einem sehr großen Wert
 # path0 = '../data/quad_data.pt'
 
-path_meshes = '../data/structured_quad_meshes_pre_selected.pt'
+path_meshes = '../data/structured_quad_meshes_pre_selected_v2.pt'
 meshes = torch.load(path_meshes)
-quantization = 2048
-d_model = 1024
+quantization = 1024
+d_model = 512
 n_latents = 2*d_model
-batch_size = 8
+batch_size = 24
 num_epochs = 50
 learning_rate = 1e-4
-stage_layers = [4, 4, 4, 4, 4]
-window_size = 600
+# stage_layers = [4, 4, 4, 4, 4]
+# stage_layers = [2, 2, 2, 2, 2]
+stage_layers = [1, 1, 1, 1, 1]
+window_size = None
 gradient_accumulation = 2
 n_heads = 8
 
-sorting_strategy = 2
-epoch_saving_point = 1
+sorting_strategy = 0
+epoch_saving_point = 123
 
-verbose = True
+verbose = False
 
 
 trainer = Trainer(data_path=path_meshes, num_epochs=num_epochs, learning_rate=learning_rate, batch_size=batch_size, quantization=quantization, d_model=d_model, n_latents=n_latents,
                   gradient_accumulation=gradient_accumulation, window_size=window_size, n_heads=n_heads, stage_layers=stage_layers, verbose=verbose, sorting_strategy=sorting_strategy)
 
 
-# path = f'./checkpoints/saved_trainings/q_{quantization}_d_model_{d_model}_n_latents_{n_latents}_batch_size{batch_size}_stage_layers_' + \
-#     '_'.join(str(s) for s in stage_layers)+f'/epoch_{epoch_saving_point}.pt'
-#
 path = f'./checkpoints/q_{quantization}_d_model_{d_model}_n_latents_{n_latents}_batch_size_{batch_size}_n_heads_{n_heads}_window_size_{window_size}_sorting_strategy_{sorting_strategy}_stage_layers_' + \
     '_'.join(str(s) for s in stage_layers)+f'/epoch_{epoch_saving_point}.pt'
 
+# path = f'./checkpoints/q_{quantization}_d_model_{d_model}_n_latents_{n_latents}_batch_size_{batch_size}_n_heads_{n_heads}_window_size_{window_size}_stage_layers_' + \
+#     '_'.join(str(s) for s in stage_layers)+f'/epoch_{epoch_saving_point}.pt'
+#
 
 checkpoint = torch.load(path, weights_only=True)
 
+min(checkpoint['training_history']['val_loss'])
+
 state = checkpoint['model_state_dict']
+
 trainer.model.load_state_dict(state)
 
 data = next(iter(trainer.val_loader))
-
 input_tokens = data['input_tokens'][0:1]
 target_tokens = data['target_tokens'][0:1]
 point_cloud = data['point_cloud'][0:1]
 face_count = data['face_count'][0:1]
 start = input_tokens[0:1, 0:8]
-face_count
-point_cloud.size()
-n_faces = face_count
-# n_faces[0] = 24
+# face_count[0]= 96
 
 generated_tokens = trainer.model.generate(
     point_cloud=point_cloud,
-    face_count=n_faces,
+    face_count=face_count,
     start_tokens=start,
     max_length=1500
 )
@@ -79,20 +97,28 @@ vertices_true, quads_true = trainer.tokenizer.detokenize(input_tokens[0])
 plotting_tools.plt_mesh(vertices_true, quads_true,
                         output_file='./figures/true_mesh.png')
 
+plotting_tools.plt_point_cloud(point_cloud[0])
+
+
 plotting_tools.plt_mesh(mesh.x[:, 0:2], mesh.faces,
                         output_file='./true_mesh.png')
+
 plotting_tools.plt_mesh(vertices, quads, point_cloud=points,
                         output_file='./test_mesh.png')
 
 
-sorting_strategy = 3
+sorting_strategy = 0
 tokenizer_1 = tokenizer_v1(quantization_levels=quantization, verbose=verbose)
 tokenizer_2 = tokenizer_v2(quantization_levels=quantization,
                            verbose=verbose, sorting_strategy=sorting_strategy)
 
 index = 2
 mesh = meshes[index]
+
 plotting_tools.plt_mesh(mesh.x[:, 0:2], mesh.faces, './figures/true_mesh.png')
+
+plotting_tools.plt_point_cloud(
+    mesh.x[:, 0:2], mesh.faces, './figures/true_mesh.png')
 
 
 tokens_2 = tokenizer_2.tokenize(mesh.x[:, 0:2], mesh.faces)

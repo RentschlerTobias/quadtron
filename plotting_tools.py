@@ -51,3 +51,15 @@ def plt_mesh(vertices: torch.Tensor, quads: torch.Tensor, output_file='./generat
     # sm.set_array([])
     plt.savefig(output_file, dpi=300, transparent=True)
     plt.close()
+
+
+def plt_point_cloud(point_cloud: torch.Tensor, output_file='./point_cloud.png'):
+
+    figsize = (5, 5)
+    plt.figure(figsize=figsize)
+
+    points = point_cloud.detach().cpu().numpy()
+    plt.scatter(points[:, 0], points[:, 1], s=5, c='black', zorder=10)
+    plt.axis([0, 1, 0, 1])
+    plt.savefig(output_file, dpi=300, transparent=True)
+    plt.close()
