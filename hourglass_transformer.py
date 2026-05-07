@@ -310,8 +310,6 @@ class HourglassTransformer(nn.Module):
         # Store for residual connection
 
         residual1 = stage1_conditioned_out
-        residual1_raw = stage1_conditioned_out
-        residual1 = F.pad(residual1_raw, (0, 0, 1, 0))[:, :-1, :]
 
         # Shortening 1: Coordinate -> Vertex (2x reduction)
         # tokens [x0,y0,x1,y1,x2,y2,x3,y3] => [y0,y1,y2,y3]
@@ -323,10 +321,7 @@ class HourglassTransformer(nn.Module):
         stage2_conditioned_out = self.stage2_conditioned(
             stage2_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened1)
 
-        # Store for residual connection
-        # residual2 = stage2_conditioned_out
-        residual2_raw = stage2_conditioned_out
-        residual2 = F.pad(residual2_raw, (0, 0, 1, 0))[:, :-1, :]
+        residual2 = stage2_conditioned_out
 
         # Shortening 2: Vertex -> Face (4x reduction)
         shortened2 = self.shortening2(stage2_conditioned_out)
@@ -350,7 +345,7 @@ class HourglassTransformer(nn.Module):
         # Stage 4: Reconsturcted Vertex level
         stage4_out = self.stage4(combined2, is_casual, position_ids_shortened1)
         stage4_conditioned_out = self.stage4_conditioned(
-            stage4_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened2)
+            stage4_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened1)
 
         # Upsampling 1: Vertex -> Coordinate
         upsampled1 = self.upsampling1(

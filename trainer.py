@@ -225,13 +225,13 @@ class Trainer:
                     if num_batches == 0 and self.current_epoch == 0:
                         print('\ngrad accumulation on')
 
-                loss = loss  # / self.gradient_accumulation
+                loss = loss / self.gradient_accumulation
                 loss.backward()  # accumulate gradients
 
                 self.accumulator += 1
 
                 if self.accumulator >= self.gradient_accumulation:
-                    # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
                     self.optimizer.step()
                     self.optimizer.zero_grad()
                     self.accumulator = 0
