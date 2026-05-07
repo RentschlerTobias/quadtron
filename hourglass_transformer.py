@@ -20,25 +20,18 @@ class ShorteningLayer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Wählt jedes n-te Element aus, um die Sequenz zu verkürzen.
-        Wählt das LETZTE Element eines Blocks (Causal).
+        Wählt das letzte Element jedes Blocks.
+        Factor 2: [x0,y0,x1,y1,...] → [y0,y1,...] (Indizes 1,3,5,...)
+        Factor 4: [v0,v1,v2,v3,v4,...] → [v3,v7,...] (Indizes 3,7,11,...)
         """
-        batch_size, seq_len, _ = x.shape
-        x = F.pad(x, (0, 0, self.shortening_factor - 1, 0)
-                  )[:, :-(self.shortening_factor - 1), :]
-        # Indizes generieren: [factor-1, 2*factor-1, ...]
-        # Beispiel Factor 4: Index 3, 7, 11...
+        _, seq_len, _ = x.shape
         indices = torch.arange(
             self.shortening_factor - 1,
             seq_len,
             self.shortening_factor,
             device=x.device
         )
-
-        # Slicing durchführen
-        shortened = x[:, indices, :]
-
-        return shortened
+        return x[:, indices, :]
 #
 
 
@@ -171,7 +164,7 @@ class CrossAttentionCondition(nn.Module):
     def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, mask: Optional[torch.Tensor] = None, position_ids: Optional[torch.Tensor] = None) -> torch.Tensor:
         # Self-attention with residual
         attn_out = self.attention(
-            query, key, value, mask=None, position_ids=position_ids)
+            query, key, value, mask=mask, position_ids=position_ids)
         x = self.norm1(query + attn_out)
 
         # Feed-forward with residual
@@ -276,9 +269,6 @@ class HourglassTransformer(nn.Module):
         self.stage5_conditioned = CrossAttentionCondition(
             d_model, n_heads, d_ff, dropout, max_position)
 
-        # Residual projections
-        self.residual_proj1 = nn.Linear(d_model, d_model)
-        self.residual_proj2 = nn.Linear(d_model, d_model)
 
     def forward(
         self,
@@ -333,8 +323,7 @@ class HourglassTransformer(nn.Module):
         #
         # Shortening 2: Vertex -> Face (4x reduction)
         shortened2 = self.shortening2(stage2_conditioned_out)
-        position_ids_shortened2 = position_ids_shortened1[:,
-                                                          self.factor2-1::self.factor2]
+        position_ids_shortened2 = position_ids_shortened1[:, self.factor2-1::self.factor2]
         # Stage 3: Face level
         stage3_out = self.stage3(
             shortened2, is_casual, position_ids_shortened2)

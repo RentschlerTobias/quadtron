@@ -70,11 +70,9 @@ class MultiHeadAttention(nn.Module):
         # dass Q und K unterschiedliche Längen haben, falls position_ids übergeben werden.
 
         if self.is_cross_attention:
-            # Bei Cross-Attention: Nur Query rotieren
-
-            rotated_Q = Q_split  # Key NICHT rotieren
-
-            rotated_K = K_split  # Key NICHT rotieren
+            # Bei Cross-Attention: Kein RoPE, da Q und K unterschiedliche Längen haben
+            rotated_Q = Q_split
+            rotated_K = K_split
         else:
             # Bei Self-Attention: Beide rotieren
             rotated_Q, rotated_K = self.rope(
