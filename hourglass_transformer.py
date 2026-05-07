@@ -24,7 +24,8 @@ class ShorteningLayer(nn.Module):
         Wählt das LETZTE Element eines Blocks (Causal).
         """
         batch_size, seq_len, _ = x.shape
-
+        x = F.pad(x, (0, 0, self.shortening_factor - 1, 0)
+                  )[:, :-(self.shortening_factor - 1), :]
         # Indizes generieren: [factor-1, 2*factor-1, ...]
         # Beispiel Factor 4: Index 3, 7, 11...
         indices = torch.arange(
@@ -66,34 +67,36 @@ class UpsamplingLayer(nn.Module):
         # 3. Causal Shift
         # Wir schieben alles um (factor - 1) nach rechts.
         # Damit darf ein Token nur Informationen aus dem vorherigen Block sehen.
-        shift_amount = self.factor - 1
-
-        # Padding am Anfang hinzufügen (Shift nach rechts)
-        zero_padding = torch.zeros(
-            x.shape[0], shift_amount, x.shape[2], device=x.device)
-        x_shifted = torch.cat([zero_padding, x], dim=1)
-
-        # 4. Auf Target Length zuschneiden oder auffüllen
-        current_len = x_shifted.shape[1]
-
-        if current_len > target_len:
-            # Wenn wir durch den Shift zu lang sind: Abschneiden
-            x_shifted = x_shifted[:, :target_len, :]
-
-        elif current_len < target_len:
-            # Wenn wir zu kurz sind (wegen Rest bei Division im Shortening):
-            # Mit Nullen am Ende auffüllen
-            pad_amount = target_len - current_len
-            # F.pad Format für 3D Input: (pad_last_dim_left, pad_last_dim_right, pad_seq_left, pad_seq_right)
-            x_shifted = F.pad(x_shifted, (0, 0, 0, pad_amount))
-
-        return x_shifted
+        # shift_amount = self.factor - 1
+        #
+        # # Padding am Anfang hinzufügen (Shift nach rechts)
+        # zero_padding = torch.zeros(
+        #     x.shape[0], shift_amount, x.shape[2], device=x.device)
+        # x_shifted = torch.cat([zero_padding, x], dim=1)
+        #
+        # # 4. Auf Target Length zuschneiden oder auffüllen
+        # current_len = x_shifted.shape[1]
+        #
+        # if current_len > target_len:
+        #     # Wenn wir durch den Shift zu lang sind: Abschneiden
+        #     x_shifted = x_shifted[:, :target_len, :]
+        #
+        # elif current_len < target_len:
+        #     # Wenn wir zu kurz sind (wegen Rest bei Division im Shortening):
+        #     # Mit Nullen am Ende auffüllen
+        #     pad_amount = target_len - current_len
+        #     # F.pad Format für 3D Input: (pad_last_dim_left, pad_last_dim_right, pad_seq_left, pad_seq_right)
+        #     x_shifted = F.pad(x_shifted, (0, 0, 0, pad_amount))
+        #
+        # return x_shifted
+        # return upsampled
+        return x[:, :target_len, :]
 
 
 class HourglassTransformerBlock(nn.Module):
     """A single transformer block in the hourglass architecture."""
 
-    def __init__(self, d_model: int, n_heads: int, d_ff: int, dropout: float = 0.1, max_position: Optional[int] = 10000):
+    def __init__(self, d_model: int, n_heads: int, d_ff: int, dropout: float = 0.2, max_position: Optional[int] = 1000):
         super().__init__()
         self.attention = MultiHeadAttention(
             d_model, n_heads, dropout=dropout, max_position=max_position)
@@ -310,8 +313,8 @@ class HourglassTransformer(nn.Module):
         # Store for residual connection
 
         residual1 = stage1_conditioned_out
-        residual1_raw = stage1_conditioned_out
-        residual1 = F.pad(residual1_raw, (0, 0, 1, 0))[:, :-1, :]
+        # residual1_raw = stage1_conditioned_out
+        # residual1 = F.pad(residual1_raw, (0, 0, 1, 0))[:, :-1, :]
 
         # Shortening 1: Coordinate -> Vertex (2x reduction)
         # tokens [x0,y0,x1,y1,x2,y2,x3,y3] => [y0,y1,y2,y3]
@@ -324,10 +327,10 @@ class HourglassTransformer(nn.Module):
             stage2_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened1)
 
         # Store for residual connection
-        # residual2 = stage2_conditioned_out
-        residual2_raw = stage2_conditioned_out
-        residual2 = F.pad(residual2_raw, (0, 0, 1, 0))[:, :-1, :]
-
+        residual2 = stage2_conditioned_out
+        # residual2_raw = stage2_conditioned_out
+        # residual2 = F.pad(residual2_raw, (0, 0, 1, 0))[:, :-1, :]
+        #
         # Shortening 2: Vertex -> Face (4x reduction)
         shortened2 = self.shortening2(stage2_conditioned_out)
         position_ids_shortened2 = position_ids_shortened1[:,
@@ -350,7 +353,7 @@ class HourglassTransformer(nn.Module):
         # Stage 4: Reconsturcted Vertex level
         stage4_out = self.stage4(combined2, is_casual, position_ids_shortened1)
         stage4_conditioned_out = self.stage4_conditioned(
-            stage4_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened2)
+            stage4_out, latent_condition, latent_condition, mask=None, position_ids=position_ids_shortened1)
 
         # Upsampling 1: Vertex -> Coordinate
         upsampled1 = self.upsampling1(

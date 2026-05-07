@@ -12,7 +12,7 @@ class FaceCountEncoder(nn.Module):
     Ähnlich wie Positional Encoding, aber für Face Counts
     """
 
-    def __init__(self, d_model: int, min_face_count: int = 2000, max_face_count: int = 8000):
+    def __init__(self, d_model: int, min_face_count: int = 10, max_face_count: int = 100):
         super().__init__()
 
         self.min_face_count = min_face_count

@@ -6,23 +6,27 @@ import torch
 def main():
 
     # path_meshes = '../data/unstructured_quad_meshes_v2.pt'
-    path_meshes = '../data/structured_quad_meshes_pre_selected_v2.pt'
+    # path_meshes = '../data/structured_quad_meshes_pre_selected_v2.pt'
+    # path_meshes = '../data/new_checkpoints/checkpoint_mesh_720.pt'
 
-    quantization = 2048
-    d_model = 1024
+    path_meshes = './centered_blades.pt'
+
+    quantization = 1024
+    d_model = 512
     n_latents = 2*d_model
-    batch_size = 16
-    num_epochs = 100
+    batch_size = 12
+    num_epochs = 50
     learning_rate = 1e-4
-    stage_layers = [6, 4, 2, 4, 6]
-    window_size = 200
+    stage_layers = [2, 2, 4, 2, 2]
+    window_size = None
     gradient_accumulation = None
-    n_heads = 8
+    n_heads = 4
     verbose = False
-    sorting_strategy = 1
+    sorting_strategy = 0
+    max_val_samples = 2
 
     trainer = Trainer(data_path=path_meshes, num_epochs=num_epochs, learning_rate=learning_rate, batch_size=batch_size, quantization=quantization, d_model=d_model, n_latents=n_latents,
-                      gradient_accumulation=gradient_accumulation, window_size=window_size, n_heads=n_heads, stage_layers=stage_layers, verbose=verbose, sorting_strategy=sorting_strategy)
+                      gradient_accumulation=gradient_accumulation, window_size=window_size, n_heads=n_heads, stage_layers=stage_layers, verbose=verbose, sorting_strategy=sorting_strategy, max_val_samples=max_val_samples)
 
     trainer.training()
 

@@ -9,7 +9,7 @@ class MeshData(Dataset):
     Dataset für Meshtron 
     """
 
-    def __init__(self, meshes, tokenizer, max_seq_length=None, n_sample_points=1500, verbose=True, boundary_points_only=False):
+    def __init__(self, meshes, tokenizer, max_seq_length=None, n_sample_points=2000, verbose=True, boundary_points_only=False):
         """
         meshes: Liste von Mesh-Objekten 
         tokenizer:  Tokenizer2D
@@ -81,7 +81,7 @@ class MeshData(Dataset):
                                  1) // num_interior_points  # ceil division
                 interior_repeated = interior_points.repeat(repeat_factor, 1)
 
-                noise_strength = 0.001
+                noise_strength = 0.05
                 noise = torch.rand_like(interior_repeated)*noise_strength
                 noisy_interior_points = interior_repeated + noise
                 num_noisy_points = noisy_interior_points.size(0)

@@ -97,7 +97,7 @@ class Trainer:
         # Training state
         self.best_val_loss = float('inf')
         self.patience_counter = 0
-        self.max_patience = 75
+        self.max_patience = int(0.2*self.num_epochs)
         self.training_history = {
             'train_loss': [],
             'val_loss': [],
@@ -134,7 +134,8 @@ class Trainer:
 
             if self.best_val_loss > current_val_loss:
                 self.best_val_loss = current_val_loss
-                self.save_checkpoint()
+                if self.best_val_loss < 1.0:
+                    self.save_checkpoint()
                 self.patience_counter = 0
             else:
                 self.patience_counter += 1
