@@ -1,4 +1,6 @@
 checkpoints/
 __pycache__/
+figures/
 *.pyc
 *.log
+*.png
