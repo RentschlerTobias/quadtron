@@ -57,32 +57,11 @@ class UpsamplingLayer(nn.Module):
         # Aus [A, B] wird [A, A, A, A, B, B, B, B] (bei factor 4)
         x = x.repeat_interleave(self.factor, dim=1)
 
-        # 3. Causal Shift
-        # Wir schieben alles um (factor - 1) nach rechts.
-        # Damit darf ein Token nur Informationen aus dem vorherigen Block sehen.
-        # shift_amount = self.factor - 1
-        #
-        # # Padding am Anfang hinzufügen (Shift nach rechts)
-        # zero_padding = torch.zeros(
-        #     x.shape[0], shift_amount, x.shape[2], device=x.device)
-        # x_shifted = torch.cat([zero_padding, x], dim=1)
-        #
-        # # 4. Auf Target Length zuschneiden oder auffüllen
-        # current_len = x_shifted.shape[1]
-        #
-        # if current_len > target_len:
-        #     # Wenn wir durch den Shift zu lang sind: Abschneiden
-        #     x_shifted = x_shifted[:, :target_len, :]
-        #
-        # elif current_len < target_len:
-        #     # Wenn wir zu kurz sind (wegen Rest bei Division im Shortening):
-        #     # Mit Nullen am Ende auffüllen
-        #     pad_amount = target_len - current_len
-        #     # F.pad Format für 3D Input: (pad_last_dim_left, pad_last_dim_right, pad_seq_left, pad_seq_right)
-        #     x_shifted = F.pad(x_shifted, (0, 0, 0, pad_amount))
-        #
-        # return x_shifted
-        # return upsampled
+        # 3. Auf target_len anpassen: auffüllen wenn seq_len nicht durch factor teilbar
+        current_len = x.shape[1]
+        if current_len < target_len:
+            pad = torch.zeros(x.shape[0], target_len - current_len, x.shape[2], device=x.device)
+            x = torch.cat([x, pad], dim=1)
         return x[:, :target_len, :]
 
 

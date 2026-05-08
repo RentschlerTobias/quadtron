@@ -1,8 +1,4 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
+# Project Overview
 
 MeshTron is a deep learning model for generating 2D quadrilateral mesh topologies autoregressively. Given a point cloud and a target face count, it generates a sequence of tokens representing quad mesh faces.
 
