@@ -7,18 +7,20 @@ from torch_geometric.data import Data
 
 # --- Config (muss mit Checkpoint übereinstimmen) ---
 path_meshes = './centered_blades_cleaned.pt'
+
 quantization = 1024
 d_model = 512
-n_latents = 2 * d_model
-batch_size = 8
-num_epochs = 50
-learning_rate = 1e-4
+n_latents = 2*d_model
+batch_size = 32
+num_epochs = 150
+learning_rate = 5e-5
 stage_layers = [2, 2, 2, 2, 2]
-window_size = 200
-n_heads = 4
-sorting_strategy = 5
-epoch_saving_point = 27
+window_size = 300
 gradient_accumulation = None
+n_heads = 4
+verbose = False
+sorting_strategy = 5
+max_val_samples = 3
 
 # --- Modell laden ---
 trainer = Trainer(
@@ -93,8 +95,10 @@ for i, mesh in enumerate(meshes):
     vertices_gen, quads_gen = tokenizer.detokenize(generated_tokens.tolist())
     n_gen_faces = quads_gen.shape[1] if quads_gen.dim(
     ) > 1 and quads_gen.shape[1] > 0 else 0
+    path = f'./figures/generated_mesh_{i}_faces{face_count}.png'
     plotting_tools.plt_mesh(
         vertices_gen, quads_gen, point_cloud=point_cloud[0],
-        output_file=f'./figures/generated_mesh_{i}_faces{face_count}.png'
+        output_file=path
     )
     print(f"  Generated mesh: {n_gen_faces} faces (target: {face_count})")
+    print(f"  output_file: {path}")

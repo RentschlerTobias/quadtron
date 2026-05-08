@@ -101,7 +101,7 @@ class Trainer:
         # Training state
         self.best_val_loss = float('inf')
         self.patience_counter = 0
-        self.max_patience = int(0.2*self.num_epochs)
+        self.max_patience = int(0.5*self.num_epochs)
         self.training_history = {
             'train_loss': [],
             'val_loss': [],

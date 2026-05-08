@@ -14,16 +14,16 @@ def train():
     quantization = 1024
     d_model = 512
     n_latents = 2*d_model
-    batch_size = 8
-    num_epochs = 50
-    learning_rate = 1e-4
-    stage_layers = [2, 2, 2, 2, 2]
-    window_size = 200
+    batch_size = 32
+    num_epochs = 150
+    learning_rate = 5e-5
+    stage_layers = [3, 3, 3, 3, 3]
+    window_size = 300
     gradient_accumulation = None
     n_heads = 4
     verbose = False
     sorting_strategy = 5
-    max_val_samples = 2
+    max_val_samples = 3
 
     trainer = Trainer(data_path=path_meshes, num_epochs=num_epochs, learning_rate=learning_rate, batch_size=batch_size, quantization=quantization, d_model=d_model, n_latents=n_latents,
                       gradient_accumulation=gradient_accumulation, window_size=window_size, n_heads=n_heads, stage_layers=stage_layers, verbose=verbose, sorting_strategy=sorting_strategy, max_val_samples=max_val_samples)
