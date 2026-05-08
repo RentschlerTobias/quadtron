@@ -8,7 +8,7 @@ There is no package build system. Run scripts directly with Python.
 
 ```bash
 # Training
-python main.py          # main training entry point (hardcoded config for centered_blades.pt dataset)
+python train.py          # main training entry point (hardcoded config for centered_blades.pt dataset)
 python training.py      # alternate entry point (work in progress)
 
 # Evaluation
