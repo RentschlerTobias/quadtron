@@ -9,7 +9,7 @@ def train():
     # path_meshes = '../data/structured_quad_meshes_pre_selected_v2.pt'
     # path_meshes = '../data/new_checkpoints/checkpoint_mesh_720.pt'
 
-    path_meshes = './centered_blades.pt'
+    path_meshes = './centered_blades_cleaned.pt'
 
     quantization = 1024
     d_model = 512

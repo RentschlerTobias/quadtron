@@ -5,6 +5,7 @@ from torch_geometric.utils import lexsort
 from typing import List, Tuple, Dict, Optional, Union
 import math
 import collections
+from half_edge import order_quads_yx
 
 
 class Tokenizer2D:
@@ -88,9 +89,24 @@ class Tokenizer2D:
                     "Using topological sorting x direction is pref for layered ordering (Strategy 2)")
             return self._order_quads_layered_x_pref(vertices, quads)
 
-        else:
+        elif self.sorting_strategy == 3:
             if self.verbose:
                 print("Using original input order (No sorting - Strategy 3)")
+            return self._order_quads_none(vertices, quads)
+
+        elif self.sorting_strategy == 4:
+            if self.verbose:
+                print("Using half-edge layered traversal (Strategy 4)")
+            return self._order_quads_half_edge_layered(vertices, quads)
+
+        elif self.sorting_strategy == 5:
+            if self.verbose:
+                print("Using directed row traversal (Strategy 5)")
+            return self._order_quads_directed(vertices, quads)
+
+        else:
+            if self.verbose:
+                print("Unknown strategy, defaulting to no sorting")
             return self._order_quads_none(vertices, quads)
 
     def _order_quads_lexicographical(self, vertices: torch.Tensor, quads: torch.Tensor):
@@ -227,6 +243,115 @@ class Tokenizer2D:
             topo_ordered_quads.append(ccw_quad)
 
         return torch.stack(topo_ordered_quads)
+    def _order_quads_half_edge_layered(self, vertices: torch.Tensor, quads: torch.Tensor):
+        """
+        Strategy 4: Half-edge topology + lexicographic layer-by-layer traversal.
+
+        Algorithmus:
+          - Lex-Key = (y, x): niedrigstes y zuerst (Layer unten→oben),
+            dann niedrigstes x (links→rechts innerhalb des Layers).
+          - Startet beim globalen lex-min Face.
+          - Greedy-Chain: nimmt immer den lex-kleinsten unbesuchten Nachbarn.
+          - Layer-Jump: die nicht-gewählten Nachbarn des ersten Face jeder Chain
+            werden als Kandidaten für den Start des nächsten Layers gespeichert.
+          - Fallback: globales lex-min aller unbesuchten Faces (fängt isolierte
+            Bereiche und faces auf der anderen Seite des Lochs/Turbinenprofils ab).
+          - Das Loch (Turbinenprofil) wird automatisch behandelt: es gibt keine
+            Half-Edge-Verbindung durch das Loch, daher umgeht der Algorithmus es
+            via Topologie.
+        """
+        mesh = om.PolyMesh()
+        v_np = vertices.detach().cpu().numpy()
+        f_np = quads.detach().cpu().numpy().T
+        vh_list = [mesh.add_vertex(np.array([v[0], v[1], 0.0])) for v in v_np]
+        for f_idx in f_np:
+            mesh.add_face([vh_list[i] for i in f_idx])
+
+        n_faces = mesh.n_faces()
+
+        # Schwerpunkte aller Faces vorberechnen
+        centroids = np.zeros((n_faces, 2))
+        for fh in mesh.faces():
+            pts = np.array([mesh.point(vh)[:2] for vh in mesh.fv(fh)])
+            centroids[fh.idx()] = pts.mean(axis=0)
+
+        # Nachbarschaftsliste aufbauen (Face-Face via Half-Edge)
+        adjacency = [[] for _ in range(n_faces)]
+        for fh in mesh.faces():
+            adjacency[fh.idx()] = [n.idx() for n in mesh.ff(fh)]
+
+        def lex_key(idx):
+            # (y, x): Layer-Richtung zuerst, dann links→rechts innerhalb Layer
+            return (float(centroids[idx][1]), float(centroids[idx][0]))
+
+        visited = [False] * n_faces
+        result = []
+        # Kandidaten für den Start der nächsten Chain/Layer
+        jump_candidates: set = set()
+
+        def get_next_start():
+            # 1. Bevorzuge Layer-Jump-Kandidaten (lex-min)
+            alive = [c for c in jump_candidates if not visited[c]]
+            if alive:
+                chosen = min(alive, key=lex_key)
+                jump_candidates.discard(chosen)
+                # Veraltete (bereits besuchte) Kandidaten aufräumen
+                jump_candidates -= {c for c in jump_candidates if visited[c]}
+                return chosen
+            # 2. Globaler Fallback: lex-min aller unbesuchten Faces
+            unvisited = [i for i in range(n_faces) if not visited[i]]
+            return min(unvisited, key=lex_key) if unvisited else None
+
+        n_visited = 0
+        while n_visited < n_faces:
+            start = get_next_start()
+            if start is None:
+                break
+
+            # Unbesuchte Nachbarn des ersten Face dieser Chain merken
+            # (werden nach dem ersten Schritt als Layer-Jump-Kandidaten gesetzt)
+            first_nbrs = [n for n in adjacency[start] if not visited[n]]
+
+            current = start
+            first_step = True
+
+            while current is not None:
+                if visited[current]:
+                    break
+                visited[current] = True
+                result.append(current)
+                n_visited += 1
+
+                nbrs = [n for n in adjacency[current] if not visited[n]]
+                if not nbrs:
+                    current = None
+                else:
+                    nbrs.sort(key=lex_key)
+                    nxt = nbrs[0]  # lex-min Nachbar = Vorwärtsrichtung
+
+                    if first_step:
+                        first_step = False
+                        # Alle Nachbarn des ersten Face, die NICHT als Vorwärts
+                        # gewählt wurden, sind Layer-Jump-Kandidaten
+                        for n in first_nbrs:
+                            if n != nxt and not visited[n]:
+                                jump_candidates.add(n)
+
+                    current = nxt
+
+        # Ergebnis-Tensor mit CCW-Vertex-Reihenfolge
+        ordered = []
+        for idx in result:
+            quad = quads[:, idx]
+            ordered.append(self._ensure_counter_clockwise(vertices[quad], quad))
+        return torch.stack(ordered)
+
+    def _order_quads_directed(self, vertices: torch.Tensor, quads: torch.Tensor):
+        """Strategy 5: directed row traversal via opposite half-edge (half_edge.py)."""
+        sorted_quads = order_quads_yx(vertices, quads)
+        # order_quads_yx returns shape (4, n) with CCW vertices already applied
+        return sorted_quads.T
+
     # --- Hilfsfunktionen (Unverändert aus deinem Original) ---
 
     def _ensure_counter_clockwise(self, coords: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:

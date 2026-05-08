@@ -5,92 +5,97 @@ import torch
 import plotting_tools
 
 
-def torch_to_openmesh(vertices_2d, faces_4n):
+def ensure_counter_clockwise(coords, indices):
+    c = coords.mean(dim=0)
+    angles = sorted(
+        [(torch.atan2(coords[i][1]-c[1], coords[i][0]-c[0]).item(), i) for i in range(4)])
+    return indices[[a[1] for a in angles]]
+
+
+def order_quads_yx(vertices: torch.Tensor, quads: torch.Tensor) -> torch.Tensor:
     """
-    Konvertiert Torch-Tensoren in ein OpenMesh PolyMesh.
-    - vertices_2d: [N, 2]
-    - faces_4n: [4, M] (Indizes der Quads)
+    Directed neighbor-first traversal with full lexicographic face keys.
+
+    Builds OpenMesh with deduplicated vertices so topology queries are correct
+    even when the input has geometrically identical vertices at different indices.
+
+    Priority at each step:
+      1. Face on the opposite edge (continue straight).
+      2. Lex-min edge-sharing neighbor (row start — establishes direction).
+      3. Global lex-min fallback (new row / disconnected region).
     """
+    n = quads.shape[1]
+    quads_np = quads.numpy()
+
+    # Deduplicate vertices by rounded coordinate before building the mesh,
+    # so that faces sharing a geometric edge but different vertex indices
+    # are correctly connected in the half-edge structure.
+    v_np = np.round(vertices.numpy(), decimals=8)
+    coord_to_id: dict = {}
+    unique_verts = []
+    remap = np.empty(len(v_np), dtype=int)
+    for i, (x, y) in enumerate(v_np):
+        k = (x, y)
+        if k not in coord_to_id:
+            coord_to_id[k] = len(unique_verts)
+            unique_verts.append([x, y])
+        remap[i] = coord_to_id[k]
+
     mesh = om.PolyMesh()
+    vhs = [mesh.add_vertex(np.array([x, y, 0.0])) for x, y in unique_verts]
+    for fi in range(n):
+        mesh.add_face([vhs[remap[v]] for v in quads_np[:, fi]])
 
-    # Konvertierung zu Numpy
-    v_np = vertices_2d.detach().cpu().numpy()
-    f_np = faces_4n.detach().cpu().numpy().T  # Zu [M, 4] transponieren
+    def key(i):
+        v = vertices[quads[:, i]]
+        return tuple(sorted(zip(v[:, 1].tolist(), v[:, 0].tolist())))
 
-    # Vertices hinzufügen (OpenMesh benötigt 3D-Koordinaten -> z=0)
-    vh_list = [mesh.add_vertex(np.array([v[0], v[1], 0.0])) for v in v_np]
+    keys = [key(i) for i in range(n)]
 
-    # Faces hinzufügen
-    for f_idx in f_np:
-        # Falls ein Face nicht hinzugefügt werden kann (z.B. doppelte Indizes),
-        # wirft OpenMesh normalerweise keine Exception, gibt aber ein ungültiges Handle zurück.
-        mesh.add_face([vh_list[i] for i in f_idx])
+    def opposite_neighbor(current_idx, prev_idx):
+        fh = mesh.face_handle(current_idx)
+        for heh in mesh.fh(fh):
+            twin = mesh.opposite_halfedge_handle(heh)
+            if mesh.face_handle(twin).idx() == prev_idx:
+                opp = mesh.face_handle(
+                    mesh.opposite_halfedge_handle(
+                        mesh.next_halfedge_handle(
+                            mesh.next_halfedge_handle(heh))))
+                return opp.idx() if opp.is_valid() else None
+        return None
 
-    return mesh
+    visited = [False] * n
+    result = []
+    prev_idx = None
 
+    def place(idx, came_from):
+        nonlocal prev_idx
+        visited[idx] = True
+        result.append(idx)
+        prev_idx = came_from
 
-def sort_quads_topologically(mesh):
-    """
-    Sortiert die Faces eines OpenMeshs topologisch mittels DFS.
-    Gibt einen Torch-Tensor mit den sortierten Face-Indizes zurück.
-    """
-    n_faces = mesh.n_faces()
-    sorted_indices = []
-    visited = np.zeros(n_faces, dtype=bool)
+    place(min(range(n), key=lambda i: keys[i]), None)
 
-    # Hilfsfunktion: Finde Start-Face (am weitesten links/Inlet)
-    def get_start_handle():
-        min_x = float('inf')
-        start_handle = mesh.face_handle(0)
-        for fh in mesh.faces():
-            # Face-Vertex-Circulator nutzen, um Schwerpunkt zu finden
-            center_x = np.mean([mesh.point(vh)
-                               for vh in mesh.fv(fh)], axis=0)[0]
-            if center_x < min_x:
-                min_x = center_x
-                start_handle = fh
-        return start_handle
+    while len(result) < n:
+        current = result[-1]
 
-    # Wir nutzen eine Schleife, falls das Mesh aus mehreren
-    # nicht-verbundenen Komponenten besteht.
-    for i in range(n_faces):
-        initial_fh = get_start_handle() if i == 0 else mesh.face_handle(i)
+        if prev_idx is not None:
+            opp = opposite_neighbor(current, prev_idx)
+            if opp is not None and not visited[opp]:
+                place(opp, current)
+                continue
+        else:
+            nbrs = [nb.idx() for nb in mesh.ff(mesh.face_handle(current))
+                    if not visited[nb.idx()]]
+            if nbrs:
+                place(min(nbrs, key=lambda i: keys[i]), current)
+                continue
 
-        if not visited[initial_fh.idx()]:
-            stack = [initial_fh]
+        unvisited = [i for i in range(n) if not visited[i]]
+        if not unvisited:
+            break
+        place(min(unvisited, key=lambda i: keys[i]), None)
 
-            while stack:
-                curr_fh = stack.pop()
-                idx = curr_fh.idx()
-
-                if visited[idx]:
-                    continue
-
-                visited[idx] = True
-                sorted_indices.append(idx)
-
-                # Face-Face-Circulator (Nachbarn finden)
-                for neighbor_fh in mesh.ff(curr_fh):
-                    if not visited[neighbor_fh.idx()]:
-                        stack.append(neighbor_fh)
-
-    return torch.tensor(sorted_indices, dtype=torch.long)
-
-
-path_meshes = '../data/structured_quad_meshes_pre_selected.pt'
-meshes = torch.load(path_meshes)
-
-
-index = 2
-torchMesh = meshes[index]
-
-vertices = torchMesh.x[:, 0:2]
-faces = torchMesh.faces
-
-mesh = torch_to_openmesh(vertices, faces)
-new_order = sort_quads_topologically(mesh)
-sorted_faces = torchMesh.faces[:, new_order]
-
-
-plotting_tools.plt_mesh(vertices, sorted_faces,
-                        output_file=f'./figures/sorted_quads{index}.png')
+    ordered = [ensure_counter_clockwise(vertices[quads[:, i]], quads[:, i])
+               for i in result]
+    return torch.stack(ordered).T
