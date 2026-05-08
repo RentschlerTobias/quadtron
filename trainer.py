@@ -65,7 +65,7 @@ class Trainer:
         self.train_loader, self.val_loader, self.max_length, self.max_face_count, self.min_face_count = self.getData(
             self.train_val_ratio, self.data_path)
 
-        if self.verbose == True:
+        if self.verbose is True:
             print('init meshtron')
         self.model = Meshtron(vocab_size=self.quantization+3,
                               d_model=self.d_model,
@@ -78,12 +78,12 @@ class Trainer:
                               stage_layers=self.stage_layers,
                               verbose=self.verbose).to(self.device)
 
-        if self.verbose == True:
+        if self.verbose is True:
             print('init optimizer')
         self.optimizer = optim.AdamW(
             self.model.parameters(), lr=self.learning_rate)
 
-        if self.verbose == True:
+        if self.verbose is True:
             print('init scheduler')
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer, num_epochs)
@@ -121,9 +121,6 @@ class Trainer:
 
     def training(self):
 
-        train_loss_history = []
-        val_loss_history = []
-
         for i in tqdm(range(self.num_epochs), desc="epochs"):
 
             self.current_epoch = i
@@ -146,14 +143,14 @@ class Trainer:
             self.training_history['epoch'].append(i)
 
             if self.patience_counter > self.max_patience:
-                if self.verbose == True:
+                if self.verbose is True:
                     print(f'patience_counter reached after epochs {i}')
                 break
 
-            if self.verbose == True:
+            if self.verbose is True:
                 print(
                     f'epoch: {i}, train loss: {current_train_loss}, validation loss: {current_val_loss}')
-        if self.verbose == True:
+        if self.verbose is True:
             print(f'end of training')
         if i == self.num_epochs - 1:
             self.save_checkpoint()
@@ -170,7 +167,7 @@ class Trainer:
 
             if self.window_size is None:
 
-                if self.verbose == True:
+                if self.verbose is True:
                     if num_batches == 0 and self.current_epoch == 0:
                         print(f'window size is {self.window_size}')
 
@@ -180,7 +177,7 @@ class Trainer:
                 position_ids = None
             else:
 
-                if self.verbose == True:
+                if self.verbose is True:
                     if num_batches == 0 and self.current_epoch == 0:
                         print(f'window size is {self.window_size}')
 
@@ -216,7 +213,7 @@ class Trainer:
             )
 
             if self.gradient_accumulation is None:
-                if self.verbose == True:
+                if self.verbose is True:
                     if num_batches == 0 and self.current_epoch == 0:
                         print('\n no grad accumulation')
                 self.optimizer.zero_grad()
@@ -225,7 +222,7 @@ class Trainer:
                 self.optimizer.step()
             else:
                 #
-                if self.verbose == True:
+                if self.verbose is True:
                     if num_batches == 0 and self.current_epoch == 0:
                         print('\ngrad accumulation on')
 
@@ -235,7 +232,8 @@ class Trainer:
                 self.accumulator += 1
 
                 if self.accumulator >= self.gradient_accumulation:
-                    # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), 1.0)
                     self.optimizer.step()
                     self.optimizer.zero_grad()
                     self.accumulator = 0
@@ -266,7 +264,7 @@ class Trainer:
 
                 if self.window_size is None:
 
-                    if self.verbose == True:
+                    if self.verbose is True:
                         if num_batches == 0 and self.current_epoch == 0:
                             print(f'window size is {self.window_size}')
 
@@ -276,7 +274,7 @@ class Trainer:
                     position_ids = None
                 else:
 
-                    if self.verbose == True:
+                    if self.verbose is True:
                         if num_batches == 0 and self.current_epoch == 0:
                             print(f'window size is {self.window_size}')
 

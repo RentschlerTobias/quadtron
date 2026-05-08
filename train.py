@@ -3,7 +3,7 @@ from trainer import Trainer
 import torch
 
 
-def main():
+def train():
 
     # path_meshes = '../data/unstructured_quad_meshes_v2.pt'
     # path_meshes = '../data/structured_quad_meshes_pre_selected_v2.pt'
@@ -18,7 +18,7 @@ def main():
     num_epochs = 50
     learning_rate = 1e-4
     stage_layers = [2, 2, 4, 2, 2]
-    window_size = 200 
+    window_size = 200
     gradient_accumulation = None
     n_heads = 4
     verbose = False
@@ -32,4 +32,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    train()

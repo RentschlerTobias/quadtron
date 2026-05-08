@@ -82,7 +82,8 @@ class MeshData(Dataset):
                 interior_repeated = interior_points.repeat(repeat_factor, 1)
 
                 noise_strength = 0.05
-                noise = torch.rand_like(interior_repeated)*noise_strength
+                # noise = torch.randn_like(interior_repeated)*noise_strength
+                noise = (torch.rand_like(interior_repeated) * 2 - 1) * noise_strength
                 noisy_interior_points = interior_repeated + noise
                 num_noisy_points = noisy_interior_points.size(0)
 
