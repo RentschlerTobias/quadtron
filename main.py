@@ -14,11 +14,11 @@ def main():
     quantization = 1024
     d_model = 512
     n_latents = 2*d_model
-    batch_size = 12
+    batch_size = 4
     num_epochs = 50
     learning_rate = 1e-4
     stage_layers = [2, 2, 4, 2, 2]
-    window_size = None
+    window_size = 200 
     gradient_accumulation = None
     n_heads = 4
     verbose = False
