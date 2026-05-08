@@ -110,7 +110,7 @@ class Tokenizer2D:
             return self._order_quads_none(vertices, quads)
 
     def _order_quads_lexicographical(self, vertices: torch.Tensor, quads: torch.Tensor):
-        """Deine ursprüngliche Sortier-Logik."""
+        """ursprüngliche Sortier-Logik."""
         sorted_quads = []
         num_quads = quads.size(1)
 
@@ -243,6 +243,7 @@ class Tokenizer2D:
             topo_ordered_quads.append(ccw_quad)
 
         return torch.stack(topo_ordered_quads)
+
     def _order_quads_half_edge_layered(self, vertices: torch.Tensor, quads: torch.Tensor):
         """
         Strategy 4: Half-edge topology + lexicographic layer-by-layer traversal.
@@ -343,7 +344,8 @@ class Tokenizer2D:
         ordered = []
         for idx in result:
             quad = quads[:, idx]
-            ordered.append(self._ensure_counter_clockwise(vertices[quad], quad))
+            ordered.append(self._ensure_counter_clockwise(
+                vertices[quad], quad))
         return torch.stack(ordered)
 
     def _order_quads_directed(self, vertices: torch.Tensor, quads: torch.Tensor):

@@ -85,6 +85,10 @@ class Trainer:
 
         if self.verbose is True:
             print('init scheduler')
+
+        if self.verbose is True:
+            print(f'sorting_strategy: {sorting_strategy}')
+
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer, num_epochs)
 

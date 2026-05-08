@@ -37,11 +37,13 @@ class MeshData(Dataset):
             self.point_clouds.append(point_cloud)
             self.face_count.append(num_faces)
         if max_seq_length is None:
-            self.max_seq_length = max(len(tokens) for tokens in self.data)
+            # self.max_seq_length = max(len(tokens) for tokens in self.data)
+            self.max_seq_length = tokenizer.max_length_token_sequence
         else:
             self.max_seq_length = max_seq_length
 
-        self.min_seq_length = min(len(tokens) for tokens in self.data)
+        # self.min_seq_length = min(len(tokens) for tokens in self.data)
+        self.min_seq_length = tokenizer.min_length_token_sequence
         print(
             f"\nMax Sequenzlänge: {self.max_seq_length}\nMin Sequenzlänge: {self.min_seq_length}")
 
@@ -83,7 +85,8 @@ class MeshData(Dataset):
 
                 noise_strength = 0.05
                 # noise = torch.randn_like(interior_repeated)*noise_strength
-                noise = (torch.rand_like(interior_repeated) * 2 - 1) * noise_strength
+                noise = (torch.rand_like(interior_repeated)
+                         * 2 - 1) * noise_strength
                 noisy_interior_points = interior_repeated + noise
                 num_noisy_points = noisy_interior_points.size(0)
 

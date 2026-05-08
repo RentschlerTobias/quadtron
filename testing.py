@@ -22,6 +22,10 @@ verbose = False
 sorting_strategy = 5
 max_val_samples = 2
 
+meshes = torch.load(path_meshes, weights_only=False)
+for mesh in meshes:
+    print(mesh.faces.size())
+
 trainer = Trainer(data_path=path_meshes, num_epochs=num_epochs, learning_rate=learning_rate, batch_size=batch_size, quantization=quantization, d_model=d_model, n_latents=n_latents,
                     gradient_accumulation=gradient_accumulation, window_size=window_size, n_heads=n_heads, stage_layers=stage_layers, verbose=verbose, sorting_strategy=sorting_strategy, max_val_samples=max_val_samples)
 

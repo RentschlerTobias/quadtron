@@ -6,18 +6,18 @@ from dataset import MeshData
 from torch_geometric.data import Data
 
 # --- Config (muss mit Checkpoint übereinstimmen) ---
-path_meshes = './centered_blades.pt'
+path_meshes = './centered_blades_cleaned.pt'
 quantization = 1024
 d_model = 512
 n_latents = 2 * d_model
-batch_size = 4 
+batch_size = 8
 num_epochs = 50
 learning_rate = 1e-4
-stage_layers = [2, 2, 4, 2, 2]
-window_size = 200 
+stage_layers = [2, 2, 2, 2, 2]
+window_size = 200
 n_heads = 4
-sorting_strategy = 0
-epoch_saving_point =23 
+sorting_strategy = 5
+epoch_saving_point = 27
 gradient_accumulation = None
 
 # --- Modell laden ---
@@ -40,7 +40,8 @@ checkpoint_path = (
 checkpoint = torch.load(checkpoint_path, weights_only=True)
 trainer.model.load_state_dict(checkpoint['model_state_dict'])
 trainer.model.eval()
-print(f"Checkpoint geladen. Bestes val_loss: {min(checkpoint['training_history']['val_loss']):.4f}")
+print(f"Checkpoint geladen. Bestes val_loss: {
+      min(checkpoint['training_history']['val_loss']):.4f}")
 
 # --- Meta-Mesh laden (zwei Verfeinerungen derselben Geometrie) ---
 meta_mesh = torch.load('./meta_mesh.pt', weights_only=False)
@@ -57,7 +58,8 @@ mesh1 = Data(
 )
 
 meshes = [mesh0, mesh1]
-tokenizer = Tokenizer2D(quantization_levels=quantization, sorting_strategy=sorting_strategy)
+tokenizer = Tokenizer2D(quantization_levels=quantization,
+                        sorting_strategy=sorting_strategy)
 test_data = MeshData(meshes, tokenizer, verbose=True)
 
 for mesh in meshes:
@@ -65,7 +67,7 @@ for mesh in meshes:
 
 # --- Für jedes Mesh: true + generated plotten ---
 for i, mesh in enumerate(meshes):
-    mesh = meshes[0]
+    mesh = meshes[i].clone()
     face_count = test_data.face_count[i]
     point_cloud = test_data.point_clouds[i].unsqueeze(0)
     face_count_tensor = torch.tensor([face_count])
@@ -74,8 +76,10 @@ for i, mesh in enumerate(meshes):
 
     true_tokens = tokenizer.tokenize(mesh.x[:, 0:2], mesh.faces)
     vertices_true, quads_true = tokenizer.detokenize(true_tokens)
-    plotting_tools.plt_mesh(vertices_true, quads_true, output_file=f'./figures/true_mesh_{i}_faces{face_count}.png')
-    print(f"  True mesh: {quads_true.shape[1] if quads_true.dim() > 1 else 0} faces geplottet")
+    plotting_tools.plt_mesh(vertices_true, quads_true,
+                            output_file=f'./figures/true_mesh_{i}_faces{face_count}.png')
+    print(f"  True mesh: {
+          quads_true.shape[1] if quads_true.dim() > 1 else 0} faces geplottet")
 
     start_tokens = torch.tensor(true_tokens[:8]).unsqueeze(0)
 
@@ -87,10 +91,10 @@ for i, mesh in enumerate(meshes):
     )
 
     vertices_gen, quads_gen = tokenizer.detokenize(generated_tokens.tolist())
-    n_gen_faces = quads_gen.shape[1] if quads_gen.dim() > 1 and quads_gen.shape[1] > 0 else 0
+    n_gen_faces = quads_gen.shape[1] if quads_gen.dim(
+    ) > 1 and quads_gen.shape[1] > 0 else 0
     plotting_tools.plt_mesh(
         vertices_gen, quads_gen, point_cloud=point_cloud[0],
         output_file=f'./figures/generated_mesh_{i}_faces{face_count}.png'
     )
     print(f"  Generated mesh: {n_gen_faces} faces (target: {face_count})")
-
