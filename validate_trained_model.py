@@ -14,14 +14,14 @@ n_latents = 2*d_model
 batch_size = 32
 num_epochs = 150
 learning_rate = 5e-5
-stage_layers = [2, 2, 2, 2, 2]
+stage_layers = [3, 3, 3, 3, 3]
 window_size = 300
 gradient_accumulation = None
 n_heads = 4
 verbose = False
 sorting_strategy = 5
 max_val_samples = 3
-
+epoch_saving_point = 149
 # --- Modell laden ---
 trainer = Trainer(
     data_path=path_meshes, num_epochs=num_epochs, learning_rate=learning_rate,
