@@ -14,15 +14,21 @@ def ensure_counter_clockwise(coords, indices):
 
 def order_quads_yx(vertices: torch.Tensor, quads: torch.Tensor) -> torch.Tensor:
     """
-    Directed neighbor-first traversal with full lexicographic face keys.
+    Directed neighbor-first traversal with shared-edge vertex ordering.
 
-    Builds OpenMesh with deduplicated vertices so topology queries are correct
-    even when the input has geometrically identical vertices at different indices.
+    Traversal priority (unchanged):
+      1. Face on the opposite edge (continue straight along the row).
+      2. Lex-min edge-sharing neighbor (new row start).
+      3. Global lex-min fallback (disconnected region).
 
-    Priority at each step:
-      1. Face on the opposite edge (continue straight).
-      2. Lex-min edge-sharing neighbor (row start — establishes direction).
-      3. Global lex-min fallback (new row / disconnected region).
+    Vertex ordering per face:
+      - First 2 = entrance edge (vertices shared with previous face).
+      - Last  2 = exit edge    (vertices shared with next face).
+      → tokens[-4:] of face N  ==  tokens[:4] of face N+1 within a row.
+
+    Row-start: exit edge last, other 2 lex-sorted first.
+    Row-end:   entrance edge first, other 2 lex-sorted last.
+    Fallback:  CCW.
     """
     n = quads.shape[1]
     quads_np = quads.numpy()

@@ -350,9 +350,61 @@ class Tokenizer2D:
 
     def _order_quads_directed(self, vertices: torch.Tensor, quads: torch.Tensor):
         """Strategy 5: directed row traversal via opposite half-edge (half_edge.py)."""
-        sorted_quads = order_quads_yx(vertices, quads)
-        # order_quads_yx returns shape (4, n) with CCW vertices already applied
-        return sorted_quads.T
+        sorted_quads = order_quads_yx(vertices, quads)   # [4, n]
+        reordered = self._shared_edge_vertex_order(vertices, sorted_quads.T)  # [n, 4]
+        return reordered
+
+    def _shared_edge_vertex_order(self, vertices: torch.Tensor, ordered_quads: torch.Tensor) -> torch.Tensor:
+        """
+        Post-processing: reorder vertices within each face so that
+        consecutive in-row faces share their connecting edge as first/last tokens.
+
+        For face N and face N+1 sharing 2 vertices (= same row):
+          - last  2 tokens of face N = the shared vertices
+          - first 2 tokens of face N+1 = those same 2 vertices (same order)
+
+        A forward pass propagates the exit order of face N as the entrance order
+        of face N+1, so tokens[-4:] of face N == tokens[:4] of face N+1.
+        """
+        def lex_sort(v_list):
+            return sorted(v_list, key=lambda v: (vertices[v][1].item(), vertices[v][0].item()))
+
+        n = ordered_quads.shape[0]
+        result = [ordered_quads[i].tolist() for i in range(n)]
+
+        for i in range(n):
+            curr     = result[i]
+            curr_set = set(curr)
+
+            # entrance: last 2 of previous face, if both belong to current face
+            entrance = None
+            if i > 0:
+                prev_last2 = result[i - 1][-2:]
+                if all(v in curr_set for v in prev_last2):
+                    entrance = list(prev_last2)
+
+            # exit: shared vertices with next face (lex-sorted for canonical order)
+            exit_verts = None
+            if i + 1 < n:
+                nxt_set = set(result[i + 1])
+                shared  = [v for v in curr if v in nxt_set]
+                if len(shared) == 2:
+                    exit_verts = lex_sort(shared)
+
+            if entrance is None and exit_verts is None:
+                continue  # isolated face or row boundary without shared edge
+
+            occupied  = set(entrance or []) | set(exit_verts or [])
+            remaining = lex_sort([v for v in curr if v not in occupied])
+
+            if entrance and exit_verts:
+                result[i] = entrance + exit_verts
+            elif entrance:
+                result[i] = entrance + remaining
+            else:
+                result[i] = remaining + exit_verts
+
+        return torch.tensor(result, dtype=torch.long)
 
     # --- Hilfsfunktionen (Unverändert aus deinem Original) ---
 

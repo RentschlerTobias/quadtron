@@ -14,7 +14,7 @@ def train():
     quantization = 256
     d_model = 512
     n_latents = d_model
-    batch_size = 8
+    batch_size = 4
     num_epochs = 50
     learning_rate = 1e-4
     stage_layers = [8, 8, 8]
