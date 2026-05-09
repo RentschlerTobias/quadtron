@@ -98,8 +98,9 @@ for i, mesh in enumerate(meshes):
     n_gen_faces = quads_gen.shape[1] if quads_gen.dim(
     ) > 1 and quads_gen.shape[1] > 0 else 0
     path = f'./figures/generated_mesh_{i}_faces{face_count}.png'
+    point_cloud_viz = (point_cloud[0] + 1) / 2  # [-1, 1] -> [0, 1]
     plotting_tools.plt_mesh(
-        vertices_gen, quads_gen, point_cloud=point_cloud[0],
+        vertices_gen, quads_gen, point_cloud=point_cloud_viz,
         output_file=path
     )
     print(f"  Generated mesh: {n_gen_faces} faces (target: {face_count})")
