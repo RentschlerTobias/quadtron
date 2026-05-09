@@ -17,8 +17,8 @@ class MeshData(Dataset):
         """
         self.meshes = meshes
         self.tokenizer = tokenizer
+        self.n_sample_points = n_sample_points
         self.data = []
-        self.point_clouds = []
         self.face_count = []
         self.boundary_points_only = boundary_points_only
         if verbose == True:
@@ -29,12 +29,9 @@ class MeshData(Dataset):
             faces = mesh.faces
 
             tokens = tokenizer.tokenize(vertices, faces)
-            point_cloud = self.get_point_cloud(mesh, n_sample_points)
             num_faces = faces.size(1)
 
             self.data.append(tokens)
-
-            self.point_clouds.append(point_cloud)
             self.face_count.append(num_faces)
         if max_seq_length is None:
             # self.max_seq_length = max(len(tokens) for tokens in self.data)
@@ -48,6 +45,10 @@ class MeshData(Dataset):
             f"\nMax Sequenzlänge: {self.max_seq_length}\nMin Sequenzlänge: {self.min_seq_length}")
 
     def get_point_cloud(self, mesh, n_sample_points):
+        all_coords = mesh.tri_coordinates[:, 0:2]
+        center = (all_coords.max(dim=0).values + all_coords.min(dim=0).values) / 2
+        # uniform scale (same for x and y) um Aspektverhältnis zu erhalten
+        scale = (all_coords.max(dim=0).values - all_coords.min(dim=0).values).max().clamp(min=1e-6)
 
         mask = mesh.tri_coordinates[:, 2] != 2
 
@@ -97,6 +98,7 @@ class MeshData(Dataset):
 
             point_cloud = torch.cat(points, dim=0)
 
+        point_cloud = (point_cloud - center) / scale * 2  # -> [-1, 1] entlang längster Achse
         return point_cloud
 
     def __len__(self):
@@ -104,7 +106,7 @@ class MeshData(Dataset):
 
     def __getitem__(self, idx):
         tokens = self.data[idx]
-        point_cloud = self.point_clouds[idx]
+        point_cloud = self.get_point_cloud(self.meshes[idx], self.n_sample_points)
         num_faces = self.face_count[idx]
 
         pad_token = self.tokenizer.pad_token
