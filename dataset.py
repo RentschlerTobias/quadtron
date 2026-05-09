@@ -9,7 +9,7 @@ class MeshData(Dataset):
     Dataset für Meshtron 
     """
 
-    def __init__(self, meshes, tokenizer, max_seq_length=None, n_sample_points=2000, verbose=True, boundary_points_only=False):
+    def __init__(self, meshes, tokenizer, max_seq_length=None, n_sample_points=1000, verbose=True, boundary_points_only=False):
         """
         meshes: Liste von Mesh-Objekten 
         tokenizer:  Tokenizer2D

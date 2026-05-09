@@ -11,7 +11,7 @@ def train():
 
     path_meshes = './centered_blades_cleaned.pt'
 
-    quantization = 128
+    quantization = 256
     d_model = 512
     n_latents = d_model
     batch_size = 8

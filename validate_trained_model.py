@@ -8,20 +8,21 @@ from torch_geometric.data import Data
 # --- Config (muss mit Checkpoint übereinstimmen) ---
 path_meshes = './centered_blades_cleaned.pt'
 
-quantization = 1024
+quantization = 128
 d_model = 512
-n_latents = 2*d_model
-batch_size = 32
-num_epochs = 150
-learning_rate = 5e-5
-stage_layers = [3, 3, 3, 3, 3]
-window_size = 300
+n_latents = d_model
+batch_size = 8
+num_epochs = 50
+learning_rate = 1e-4
+stage_layers = [8, 8, 8]
+window_size = None
 gradient_accumulation = None
-n_heads = 4
+n_heads = 8  # 512 / 64 = 8 channels/head (paper: 64)
 verbose = False
 sorting_strategy = 5
 max_val_samples = 3
-epoch_saving_point = 149
+
+epoch_saving_point = 21
 # --- Modell laden ---
 trainer = Trainer(
     data_path=path_meshes, num_epochs=num_epochs, learning_rate=learning_rate,
@@ -41,6 +42,7 @@ checkpoint_path = (
 
 checkpoint = torch.load(checkpoint_path, weights_only=True)
 trainer.model.load_state_dict(checkpoint['model_state_dict'])
+
 trainer.model.eval()
 print(f"Checkpoint geladen. Bestes val_loss: {
       min(checkpoint['training_history']['val_loss']):.4f}")
