@@ -73,7 +73,7 @@ for mesh in meshes:
 for i, mesh in enumerate(meshes):
     mesh = meshes[i].clone()
     face_count = test_data.face_count[i]
-    point_cloud = test_data.point_clouds[i].unsqueeze(0)
+    point_cloud = test_data.get_point_cloud(meshes[i], test_data.n_sample_points).unsqueeze(0)
     face_count_tensor = torch.tensor([face_count])
 
     print(f"\n=== Mesh {i}: {face_count} faces ===")
