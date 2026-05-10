@@ -1,426 +1,328 @@
-import torch
-
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from torch.utils.data import random_split
-import torch.nn.functional as f
-from tqdm import tqdm
+import math
+from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
-import numpy as np
+from typing import Optional
 
-from meshtron import Meshtron
-from tokenizer_v2 import Tokenizer2D
+import torch
+import torch.optim as optim
+from torch.utils.data import DataLoader, random_split
+from tqdm import tqdm
+
+from config import TrainingConfig
 from dataset import MeshData
+from logger import JSONLLogger
+from meshtron import Meshtron
+from metrics import EpochMetrics, TokenLossAccumulator
+from objectives import TeacherForcingObjective
+from policy import Policy
+from reproducibility import dataloader_generator, set_seed, worker_init_fn
+from tokenizer_v2 import Tokenizer2D
+
+
+@dataclass
+class RunResult:
+    best_val_bpt: float
+    best_val_nll: float
+    best_val_perplexity: float
+    best_epoch: int
+    final_train_bpt: float
+    final_val_bpt: float
+    epochs_run: int
+    config_hash: str
+    run_dir: str
+
+
+_PRECISION_DTYPE = {
+    "fp32": None,
+    "bf16": torch.bfloat16,
+    "fp16": torch.float16,
+}
 
 
 class Trainer:
-    def __init__(
-        self,
-        data_path='../data/quad_data.pt',
-        checkpoint_dir='checkpoints',
-        verbose=True,
-        quantization=1024,
-        d_model=512,
-        n_latents=None,
-        batch_size=2,
-        num_epochs=50,
-        learning_rate=1e-4,
-        stage_layers=[4, 8, 12, 16, 20],
-        gradient_accumulation=None,
-        max_val_samples=10,
-        n_heads=8,
-        window_size=None,
-        sorting_strategy=1
+    """Schlanker Trainer fuer Meshtron.
 
-    ):
-        self.verbose = verbose
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.quantization = quantization
-        self.d_model = d_model
-        self.train_val_ratio = 0.80
+    - Token-gewichteter Loss (sum/n_tokens) -> vergleichbar ueber Batch-Size,
+      Sequenzlaenge und Padding hinweg.
+    - bf16/fp16 Autocast optional, GradScaler nur fuer fp16.
+    - Linear-Warmup + Cosine-Annealing.
+    - JSONL-Logging pro Run, Checkpointing nur wenn ausdruecklich verlangt.
+    """
 
-        self.n_heads = n_heads
-        self.gradient_accumulation = gradient_accumulation
-        self.accumulator = 0
-        self.window_size = window_size
-        if n_latents == None:
-            self.n_latents = self.d_model
-        else:
-            self.n_latents = n_latents
+    def __init__(self, cfg: TrainingConfig):
+        self.cfg = cfg
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.batch_size = batch_size
-        self.num_epochs = num_epochs
-        self.learning_rate = learning_rate
-        self.stage_layers = stage_layers
-        self.data_path = data_path
-        self.coord_dim = 2  # dimension of point_cloud coordinates
-        self.max_val_samples = max_val_samples
-
-        self.sorting_strategy = sorting_strategy
+        set_seed(cfg.seed, cudnn_deterministic=cfg.cudnn_deterministic)
 
         self.tokenizer = Tokenizer2D(
-            quantization_levels=quantization, verbose=self.verbose, sorting_strategy=self.sorting_strategy)
+            quantization_levels=cfg.quantization,
+            verbose=False,
+            sorting_strategy=cfg.sorting_strategy,
+        )
 
-        self.train_loader, self.val_loader, self.max_length, self.max_face_count, self.min_face_count = self.getData(
-            self.train_val_ratio, self.data_path)
+        (
+            self.train_loader,
+            self.val_loader,
+            self.max_length,
+            self.max_face_count,
+            self.min_face_count,
+        ) = self._build_loaders()
 
-        if self.verbose is True:
-            print('init meshtron')
-        self.model = Meshtron(vocab_size=self.quantization+3,
-                              d_model=self.d_model,
-                              max_seq_length=self.max_length,
-                              n_latents=self.n_latents,
-                              input_dim=self.coord_dim,
-                              min_face_count=self.min_face_count,
-                              max_face_count=self.max_face_count,
-                              n_heads=self.n_heads,
-                              stage_layers=self.stage_layers,
-                              verbose=self.verbose).to(self.device)
+        self.model = Meshtron(
+            vocab_size=cfg.quantization + 3,
+            d_model=cfg.d_model,
+            max_seq_length=self.max_length,
+            n_latents=cfg.n_latents,
+            input_dim=2,
+            min_face_count=self.min_face_count,
+            max_face_count=self.max_face_count,
+            n_heads=cfg.n_heads,
+            stage_layers=tuple(cfg.stage_layers),
+            dropout=cfg.dropout,
+            ffn_mult=cfg.ffn_mult,
+            verbose=False,
+        ).to(self.device)
+        self.policy = Policy(self.model)
 
-        if self.verbose is True:
-            print('init optimizer')
+        self.objective = TeacherForcingObjective(pad_token=self.tokenizer.pad_token)
+
         self.optimizer = optim.AdamW(
-            self.model.parameters(), lr=self.learning_rate)
+            self.model.parameters(),
+            lr=cfg.learning_rate,
+            weight_decay=cfg.weight_decay,
+        )
 
-        if self.verbose is True:
-            print('init scheduler')
+        steps_per_epoch = max(1, len(self.train_loader) // max(1, cfg.accumulation_steps))
+        self.total_steps = steps_per_epoch * cfg.num_epochs
+        self.scheduler = self._build_scheduler(self.total_steps, cfg.warmup_steps)
 
-        if self.verbose is True:
-            print(f'sorting_strategy: {sorting_strategy}')
+        self.amp_dtype = _PRECISION_DTYPE.get(cfg.precision)
+        self.use_autocast = self.amp_dtype is not None and self.device.type == "cuda"
+        self.scaler = torch.cuda.amp.GradScaler(enabled=(cfg.precision == "fp16"))
 
-        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, num_epochs)
+        self.config_hash = cfg.hash()
+        self.logger = JSONLLogger(cfg.log_dir, self.config_hash, cfg.to_dict())
 
-        self.notation = f'q_{self.quantization}_d_model_{self.d_model}_n_latents_{self.n_latents}_batch_size_{self.batch_size}_n_heads_{self.n_heads}_window_size_{window_size}_sorting_strategy_{sorting_strategy}_stage_layers_' + \
-            '_'.join(str(s) for s in self.stage_layers)
+        self.global_step = 0
+        self.best_val_bpt = float("inf")
+        self.best_val_nll = float("inf")
+        self.best_val_ppl = float("inf")
+        self.best_epoch = -1
+        self.last_train: Optional[EpochMetrics] = None
+        self.last_val: Optional[EpochMetrics] = None
 
-        self.checkpoint_dir = Path(checkpoint_dir) / self.notation
-        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    # ------------------------------------------------------------------ public
 
-        # Training state
-        self.best_val_loss = float('inf')
-        self.patience_counter = 0
-        self.max_patience = int(0.5*self.num_epochs)
-        self.training_history = {
-            'train_loss': [],
-            'val_loss': [],
-            'epoch': []
-        }
+    def run(self) -> RunResult:
+        cfg = self.cfg
+        epochs_run = 0
+        try:
+            for epoch in tqdm(range(cfg.num_epochs), desc="epochs"):
+                epochs_run = epoch + 1
+                train_metrics = self._epoch(self.train_loader, train=True, desc=f"train e{epoch}")
+                self.last_train = train_metrics
 
-        self.current_epoch = 0
+                if (epoch % max(1, cfg.val_every_n_epochs)) == 0:
+                    val_metrics = self._epoch(
+                        self._val_iter(),
+                        train=False,
+                        desc=f"val e{epoch}",
+                    )
+                    self.last_val = val_metrics
 
-        if True:
+                    improved = val_metrics.bits_per_token < self.best_val_bpt
+                    if improved:
+                        self.best_val_bpt = val_metrics.bits_per_token
+                        self.best_val_nll = val_metrics.nll_per_token
+                        self.best_val_ppl = val_metrics.perplexity
+                        self.best_epoch = epoch
+                        if cfg.save_best:
+                            self._save_checkpoint("best.pt", epoch)
 
-            print("\ntraining configuration")
-            print(f"\ndevice: {self.device}")
-            print(f"\nquantization: {self.quantization}")
-            print(f"\nd_model: {self.d_model}")
-            print(f"\nn_latents: {self.n_latents}")
-            print(f"\nn_heads: {self.n_heads}")
-            print(f"\nbatch_size: {self.batch_size}")
-            print(f"\nnum_epochs: {self.num_epochs}")
-            print(f"\nlearning_rate: {self.learning_rate}")
-            print(f"\nstage_layers: {self.stage_layers}")
+                    self.logger.log(
+                        epoch=epoch,
+                        step=self.global_step,
+                        lr=self._current_lr(),
+                        train_nll=train_metrics.nll_per_token,
+                        train_bpt=train_metrics.bits_per_token,
+                        train_ppl=train_metrics.perplexity,
+                        train_tokens=train_metrics.n_tokens,
+                        val_nll=val_metrics.nll_per_token,
+                        val_bpt=val_metrics.bits_per_token,
+                        val_ppl=val_metrics.perplexity,
+                        val_tokens=val_metrics.n_tokens,
+                        improved=improved,
+                    )
 
-    def training(self):
-
-        for i in tqdm(range(self.num_epochs), desc="epochs"):
-
-            self.current_epoch = i
-            current_train_loss = self.train_epoch()
-
-            print('\nvalidation')
-            current_val_loss = self.val_epoch()
-
-            if self.best_val_loss > current_val_loss:
-                self.best_val_loss = current_val_loss
-                if self.best_val_loss < 1.0:
-                    self.save_checkpoint()
-                self.patience_counter = 0
-            else:
-                self.patience_counter += 1
-
-            self.training_history['train_loss'].append(
-                current_train_loss)
-            self.training_history['val_loss'].append(current_val_loss)
-            self.training_history['epoch'].append(i)
-
-            if self.patience_counter > self.max_patience:
-                if self.verbose is True:
-                    print(f'patience_counter reached after epochs {i}')
-                break
-
-            if self.verbose is True:
-                print(
-                    f'epoch: {i}, train loss: {current_train_loss}, validation loss: {current_val_loss}')
-        if self.verbose is True:
-            print(f'end of training')
-        if i == self.num_epochs - 1:
-            self.save_checkpoint()
-
-    def train_epoch(self):
-
-        self.model.train()
-
-        total_loss = 0
-        num_batches = 0
-
-        progress_bar = tqdm(self.train_loader, desc='training')
-        for batch in progress_bar:
-
-            if self.window_size is None:
-
-                if self.verbose is True:
-                    if num_batches == 0 and self.current_epoch == 0:
-                        print(f'window size is {self.window_size}')
-
-                input_tokens = batch['input_tokens'].to(self.device)
-                target_tokens = batch['target_tokens'].to(self.device)
-                pad_token = batch['pad_token'][0].item()
-                position_ids = None
-            else:
-
-                if self.verbose is True:
-                    if num_batches == 0 and self.current_epoch == 0:
-                        print(f'window size is {self.window_size}')
-
-                num_tokens = batch['input_tokens'].size(1)
-
-                max_int = int(np.floor((num_tokens-self.window_size)/8))
-                rand_int = torch.randint(0, max_int, (1,))
-                start_idx = 8*rand_int
-                end_idx = 8*rand_int+self.window_size
-                position_ids = torch.arange(start_idx.item(), end_idx.item(), device=self.device).unsqueeze(
-                    0).expand(self.batch_size, -1)
-
-                input_tokens = (batch['input_tokens']
-                                [:, start_idx:end_idx]).to(self.device)
-                target_tokens = (batch['target_tokens']
-                                 [:, start_idx:end_idx]).to(self.device)
-                pad_token = (batch['pad_token'][0]).item()
-
-            face_count = batch['face_count'].to(self.device)
-            point_cloud = batch['point_cloud'].to(self.device)
-            # forward pass
-            logits = self.model(input_tokens, point_cloud,
-                                face_count, position_ids)
-            reshaped_logits = logits.reshape(-1, logits.size(-1))
-            reshaped_tokens = target_tokens.reshape(-1)
-
-            # loss berechnen (ignorieren von pad (auffuell) tokens)
-
-            loss = f.cross_entropy(
-                reshaped_logits,
-                reshaped_tokens,
-                ignore_index=pad_token
-            )
-
-            if self.gradient_accumulation is None:
-                if self.verbose is True:
-                    if num_batches == 0 and self.current_epoch == 0:
-                        print('\n no grad accumulation')
-                self.optimizer.zero_grad()
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                self.optimizer.step()
-            else:
-                #
-                if self.verbose is True:
-                    if num_batches == 0 and self.current_epoch == 0:
-                        print('\ngrad accumulation on')
-
-                loss = loss  # / self.gradient_accumulation
-                loss.backward()  # accumulate gradients
-
-                self.accumulator += 1
-
-                if self.accumulator >= self.gradient_accumulation:
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), 1.0)
-                    self.optimizer.step()
-                    self.optimizer.zero_grad()
-                    self.accumulator = 0
-
-            total_loss += loss.item()
-            num_batches += 1
-            progress_bar.set_postfix({'loss': f'{loss.item():.4f}'})
-
-        return total_loss / num_batches
-
-    def val_epoch(self):
-
-        self.model.eval()
-
-        total_val_loss = 0
-
-        num_batches = 0
-
-        if self.max_val_samples is not None:
-            progress_bar = tqdm(
-                islice(self.val_loader, self.max_val_samples), total=self.max_val_samples, desc='validation')
-        else:
-            progress_bar = tqdm(self.val_loader, desc='validation')
-
-        for batch in progress_bar:
-            # for batch in self.train_loader:
-            with torch.no_grad():
-
-                if self.window_size is None:
-
-                    if self.verbose is True:
-                        if num_batches == 0 and self.current_epoch == 0:
-                            print(f'window size is {self.window_size}')
-
-                    input_tokens = batch['input_tokens'].to(self.device)
-                    target_tokens = batch['target_tokens'].to(self.device)
-
-                    position_ids = None
+                    if epoch - self.best_epoch >= cfg.early_stopping_patience:
+                        break
                 else:
+                    self.logger.log(
+                        epoch=epoch,
+                        step=self.global_step,
+                        lr=self._current_lr(),
+                        train_nll=train_metrics.nll_per_token,
+                        train_bpt=train_metrics.bits_per_token,
+                        train_ppl=train_metrics.perplexity,
+                        train_tokens=train_metrics.n_tokens,
+                    )
 
-                    if self.verbose is True:
-                        if num_batches == 0 and self.current_epoch == 0:
-                            print(f'window size is {self.window_size}')
+            if cfg.save_last:
+                self._save_checkpoint("last.pt", epochs_run - 1)
+        finally:
+            result = RunResult(
+                best_val_bpt=self.best_val_bpt,
+                best_val_nll=self.best_val_nll,
+                best_val_perplexity=self.best_val_ppl,
+                best_epoch=self.best_epoch,
+                final_train_bpt=self.last_train.bits_per_token if self.last_train else float("nan"),
+                final_val_bpt=self.last_val.bits_per_token if self.last_val else float("nan"),
+                epochs_run=epochs_run,
+                config_hash=self.config_hash,
+                run_dir=str(self.logger.run_dir),
+            )
+            self.logger.write_result(**result.__dict__)
+            self.logger.close()
+        return result
 
-                    num_tokens = batch['input_tokens'].size(1)
-                    max_int = int(np.floor((num_tokens-self.window_size)/8))
-                    rand_int = torch.randint(0, max_int, (1,))
-                    start_idx = 8*rand_int
-                    end_idx = 8*rand_int+self.window_size
-                    position_ids = torch.arange(start_idx.item(), end_idx.item(), device=self.device).unsqueeze(
-                        0).expand(self.batch_size, -1)
-                    input_tokens = (batch['input_tokens']
-                                    [:, start_idx:end_idx]).to(self.device)
-                    target_tokens = (batch['target_tokens']
-                                     [:, start_idx:end_idx]).to(self.device)
+    # ----------------------------------------------------------------- private
 
-                pad_token = (batch['pad_token'][0]).item()
-                point_cloud = batch['point_cloud'].to(self.device)
-                face_count = batch['face_count'].to(self.device)
+    def _epoch(self, loader, train: bool, desc: str) -> EpochMetrics:
+        self.model.train(mode=train)
+        accumulator = TokenLossAccumulator()
 
-               # forward pass
-                logits = self.model(input_tokens, point_cloud,
-                                    face_count, position_ids)
-                reshaped_logits = logits.reshape(-1, logits.size(-1))
-                reshaped_tokens = target_tokens.reshape(-1)
+        if train:
+            self.optimizer.zero_grad(set_to_none=True)
 
-                # loss berechnen (ignorieren von pad (auffuell) tokens)
+        accum_counter = 0
+        progress = tqdm(loader, desc=desc, leave=False)
+        for batch in progress:
+            ctx = (
+                torch.autocast(device_type="cuda", dtype=self.amp_dtype)
+                if self.use_autocast
+                else _NullCtx()
+            )
+            grad_ctx = torch.enable_grad() if train else torch.no_grad()
+            with grad_ctx, ctx:
+                out = self.objective.compute(batch, self.policy)
+            loss = out.loss
 
-                val_loss = f.cross_entropy(
-                    reshaped_logits,
-                    reshaped_tokens,
-                    ignore_index=pad_token
-                )
+            if train:
+                scaled = loss / max(1, self.cfg.accumulation_steps)
+                self.scaler.scale(scaled).backward() if self.scaler.is_enabled() else scaled.backward()
+                accum_counter += 1
 
-                total_val_loss += val_loss.item()
-                num_batches += 1
+                if accum_counter >= self.cfg.accumulation_steps:
+                    if self.scaler.is_enabled():
+                        self.scaler.unscale_(self.optimizer)
+                    if self.cfg.grad_clip and self.cfg.grad_clip > 0:
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.grad_clip)
+                    if self.scaler.is_enabled():
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
+                    else:
+                        self.optimizer.step()
+                    self.optimizer.zero_grad(set_to_none=True)
+                    self.scheduler.step()
+                    self.global_step += 1
+                    accum_counter = 0
 
-                # update progress bar
-                progress_bar.set_postfix({'validation loss': val_loss.item()})
+            accumulator.update(out.loss_sum, out.n_tokens)
+            progress.set_postfix(bpt=f"{accumulator.compute().bits_per_token:.3f}")
 
-                if self.max_val_samples < num_batches:
+        return accumulator.compute()
 
-                    print(f'end at num val samples {num_batches}')
-                    return total_val_loss / num_batches
+    def _val_iter(self):
+        if self.cfg.max_val_batches and self.cfg.max_val_batches > 0:
+            return islice(self.val_loader, self.cfg.max_val_batches)
+        return self.val_loader
 
-                input_tokens.detach()
-                target_tokens.detach()
-                pad_token
-                point_cloud.detach()
-
-        return total_val_loss / num_batches
-
-    def getData(self, train_val_ratio, path='../data/quad_data.pt'):
-
-        input_dim = 2
-        train_size = train_val_ratio
-        val_size = 1 - train_size
-
-        meshes = torch.load(path, weights_only=False)
+    def _build_loaders(self):
+        meshes = torch.load(self.cfg.data_path, weights_only=False)
 
         max_faces = 0
-        min_faces = float('inf')
-
+        min_faces = float("inf")
         for mesh in meshes:
-            num_faces = mesh.faces.size(1)
-            if max_faces < num_faces:
-                max_faces = num_faces
-            if min_faces > num_faces:
-                min_faces = num_faces
+            n = mesh.faces.size(1)
+            max_faces = max(max_faces, n)
+            min_faces = min(min_faces, n)
 
-        max_token_sequence = max_faces*self.tokenizer.tokens_per_face + \
-            2*self.tokenizer.n_start_end_tokens_repeat
+        max_token_sequence = (
+            max_faces * self.tokenizer.tokens_per_face
+            + 2 * self.tokenizer.n_start_end_tokens_repeat
+        )
         self.tokenizer.max_length_padding = max_token_sequence
+
+        gen = dataloader_generator(self.cfg.seed)
         train_meshes, val_meshes = random_split(
             meshes,
-            [train_size, val_size]
+            [self.cfg.train_val_ratio, 1.0 - self.cfg.train_val_ratio],
+            generator=gen,
         )
 
         train_dataset = MeshData(
-            train_meshes, self.tokenizer, verbose=self.verbose)
+            train_meshes,
+            self.tokenizer,
+            n_sample_points=self.cfg.n_sample_points,
+            verbose=False,
+        )
         val_dataset = MeshData(
-            val_meshes, self.tokenizer, verbose=self.verbose)
-
-        train_dataloader = DataLoader(
-            train_dataset,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=0,
-            drop_last=True
+            val_meshes,
+            self.tokenizer,
+            n_sample_points=self.cfg.n_sample_points,
+            verbose=False,
         )
 
-        # collate_fn = collate_fn
-        val_dataloader = DataLoader(
-            val_dataset,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=0,
-            drop_last=True
+        common = dict(
+            batch_size=self.cfg.batch_size,
+            num_workers=self.cfg.num_workers,
+            pin_memory=self.cfg.pin_memory and torch.cuda.is_available(),
+            drop_last=True,
+            worker_init_fn=worker_init_fn if self.cfg.num_workers > 0 else None,
         )
 
-        max_train_length = train_dataset.max_seq_length
-        max_val_length = val_dataset.max_seq_length
+        train_loader = DataLoader(train_dataset, shuffle=True, generator=gen, **common)
+        val_loader = DataLoader(val_dataset, shuffle=False, **common)
 
-        max_length = 0
-        if max_train_length < max_val_length:
-            max_length = max_val_length
-        else:
-            max_length = max_train_length
+        max_length = max(train_dataset.max_seq_length, val_dataset.max_seq_length)
+        return train_loader, val_loader, max_length, max_faces, min_faces
 
-        if self.verbose == True:
-            print(f"max token sequenz length: {max_length}")
+    def _build_scheduler(self, total_steps: int, warmup_steps: int):
+        warmup_steps = max(0, min(warmup_steps, max(1, total_steps - 1)))
 
-        return train_dataloader, val_dataloader, max_length, max_faces, min_faces
+        def lr_lambda(step: int) -> float:
+            if warmup_steps > 0 and step < warmup_steps:
+                return float(step + 1) / float(warmup_steps)
+            progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+            progress = min(max(progress, 0.0), 1.0)
+            return 0.5 * (1.0 + math.cos(math.pi * progress))
 
-    def save_checkpoint(self):
+        return optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lr_lambda)
 
-        checkpoint = {
-            'epoch': self.current_epoch,
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
-            'best_val_loss': self.best_val_loss,
-            'training_history': self.training_history,
-        }
+    def _current_lr(self) -> float:
+        return float(self.optimizer.param_groups[0]["lr"])
 
-        best_path = f'{str(self.checkpoint_dir)}/epoch_{self.current_epoch}.pt'
-        torch.save(checkpoint, best_path)
-        print(f"💾 Saved best model with val_loss: {self.best_val_loss:.4f}")
+    def _save_checkpoint(self, name: str, epoch: int) -> None:
+        path = Path(self.logger.run_dir) / name
+        torch.save(
+            {
+                "epoch": epoch,
+                "global_step": self.global_step,
+                "model_state_dict": self.model.state_dict(),
+                "optimizer_state_dict": self.optimizer.state_dict(),
+                "scheduler_state_dict": self.scheduler.state_dict(),
+                "best_val_bpt": self.best_val_bpt,
+                "config": self.cfg.to_dict(),
+            },
+            path,
+        )
 
-    def delete_gpu_memory(self):
 
-        if self.verbose:
-            print('\nPre Memory Delete')
-            print(
-                f"Allocated memory: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
-            print(
-                f"Cached memory: {torch.cuda.memory_reserved() / 1024**2:.2f} MB")
+class _NullCtx:
+    def __enter__(self):
+        return self
 
-        torch.cuda.empty_cache()
-
-        if self.verbose:
-            print('\nPost Memory Delete')
-            print(
-                f"Allocated memory: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
-            print(
-                f"Cached memory: {torch.cuda.memory_reserved() / 1024**2:.2f} MB")
+    def __exit__(self, *exc):
+        return False
