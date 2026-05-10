@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import torch
 import torch.optim as optim
@@ -115,7 +115,18 @@ class Trainer:
 
     # ------------------------------------------------------------------ public
 
-    def run(self) -> RunResult:
+    def run(
+        self,
+        on_epoch: Optional[Callable[[int, EpochMetrics, Optional[EpochMetrics]], None]] = None,
+    ) -> RunResult:
+        """Train the model.
+
+        Args:
+            on_epoch: optional callback invoked after each epoch with
+                (epoch_index, train_metrics, val_metrics_or_None). May raise to
+                abort training early (e.g. `optuna.TrialPruned`). Partial logs
+                are still flushed via the `finally` block.
+        """
         cfg = self.cfg
         epochs_run = 0
         try:
@@ -156,6 +167,9 @@ class Trainer:
                         improved=improved,
                     )
 
+                    if on_epoch is not None:
+                        on_epoch(epoch, train_metrics, val_metrics)
+
                     if epoch - self.best_epoch >= cfg.early_stopping_patience:
                         break
                 else:
@@ -168,6 +182,8 @@ class Trainer:
                         train_ppl=train_metrics.perplexity,
                         train_tokens=train_metrics.n_tokens,
                     )
+                    if on_epoch is not None:
+                        on_epoch(epoch, train_metrics, None)
 
             if cfg.save_last:
                 self._save_checkpoint("last.pt", epochs_run - 1)
@@ -315,6 +331,12 @@ class Trainer:
                 "scheduler_state_dict": self.scheduler.state_dict(),
                 "best_val_bpt": self.best_val_bpt,
                 "config": self.cfg.to_dict(),
+                "max_seq_length": int(self.max_length),
+                "max_face_count": int(self.max_face_count),
+                "min_face_count": int(self.min_face_count),
+                "pad_token": int(self.tokenizer.pad_token),
+                "start_token": int(self.tokenizer.start_token),
+                "end_token": int(self.tokenizer.end_token),
             },
             path,
         )
