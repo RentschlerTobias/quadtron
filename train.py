@@ -13,7 +13,7 @@ def train():
 
     quantization = 256
     d_model = 512
-    n_latents = d_model
+    n_latents = 16
     batch_size = 4
     num_epochs = 50
     learning_rate = 1e-4
@@ -22,7 +22,7 @@ def train():
     gradient_accumulation = None
     n_heads = 8  # 512 / 64 = 8 channels/head (paper: 64)
     verbose = False
-    sorting_strategy = 5
+    sorting_strategy = 1
     max_val_samples = 3
 
     trainer = Trainer(data_path=path_meshes, num_epochs=num_epochs, learning_rate=learning_rate, batch_size=batch_size, quantization=quantization, d_model=d_model, n_latents=n_latents,

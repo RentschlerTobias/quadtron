@@ -21,10 +21,12 @@ def order_quads_yx(vertices: torch.Tensor, quads: torch.Tensor) -> torch.Tensor:
       2. Lex-min edge-sharing neighbor (new row start).
       3. Global lex-min fallback (disconnected region).
 
-    Vertex ordering per face:
-      - First 2 = entrance edge (vertices shared with previous face).
+    Vertex ordering per face (applied later in Tokenizer2D._shared_edge_vertex_order):
+      - First 2 = entrance edge (vertices shared with previous face), reversed
+        relative to that face's exit edge so all faces in a row share the same
+        rotation direction (no CCW/CW alternation).
       - Last  2 = exit edge    (vertices shared with next face).
-      → tokens[-4:] of face N  ==  tokens[:4] of face N+1 within a row.
+      → last 2 of face N reversed == first 2 of face N+1 within a row.
 
     Row-start: exit edge last, other 2 lex-sorted first.
     Row-end:   entrance edge first, other 2 lex-sorted last.

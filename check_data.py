@@ -1,73 +1,125 @@
+import sys
+
 import numpy as np
 import torch
 
 
-def remove_duplicate_vertices(x: torch.Tensor, faces: torch.Tensor,
-                              decimals: int = 8):
+class MeshDataChecker:
     """
-    Remove duplicate vertices (by rounded 2D coordinate) from a mesh.
+    Loads a list of meshes from a .pt file and runs a configurable pipeline
+    of checks/fixes on each mesh. Extend by adding methods prefixed with
+    `_check_` — they are discovered automatically in definition order.
 
-    x is the full vertex feature tensor; deduplication uses only columns 0:2.
-    All feature columns are preserved in the returned tensor.
+    Each check method signature:
+        _check_<name>(self, mesh_idx: int, x: Tensor, faces: Tensor)
+            -> (new_x: Tensor, new_faces: Tensor, message: str | None)
 
-    Returns:
-      new_x       — deduplicated feature tensor (same number of columns as x)
-      new_faces   — face tensor with indices remapped into new_x
-      n_removed   — number of vertices removed
+    Returning None as the message means no issue was found for that mesh.
     """
-    coords_np = np.round(x[:, 0:2].numpy(), decimals=decimals)
 
-    coord_to_id: dict = {}
-    remap = np.empty(len(coords_np), dtype=int)
-    keep = []
+    def __init__(self, path: str, decimals: int = 5):
+        self.path = path
+        self.decimals = decimals
+        self.meshes = torch.load(path, weights_only=False)
 
-    for i, (cx, cy) in enumerate(coords_np):
-        k = (cx, cy)
-        if k not in coord_to_id:
-            coord_to_id[k] = len(keep)
-            keep.append(i)
-        remap[i] = coord_to_id[k]
+    # ------------------------------------------------------------------
+    # Checks
+    # ------------------------------------------------------------------
 
-    new_x = x[keep]
-    new_faces = torch.from_numpy(remap[faces.numpy()])
-    return new_x, new_faces, len(coords_np) - len(keep)
+    def _check_duplicate_vertices(
+        self, i: int, x: torch.Tensor, faces: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, str | None]:
+        coords_np = np.round(x[:, 0:2].numpy(), self.decimals)
 
+        coord_to_id: dict = {}
+        remap = np.empty(len(coords_np), dtype=int)
+        keep: list[int] = []
 
-def check_data(path: str, decimals: int = 8):
-    """
-    Load a list of meshes, report and remove duplicate vertices.
+        for j, (cx, cy) in enumerate(coords_np):
+            k = (cx, cy)
+            if k not in coord_to_id:
+                coord_to_id[k] = len(keep)
+                keep.append(j)
+            remap[j] = coord_to_id[k]
 
-    Expects each mesh to have:
-      .x      — vertex feature tensor, coordinates in columns 0:2
-      .faces  — face index tensor of shape (4, n_faces)
+        n_removed = len(coords_np) - len(keep)
+        if n_removed == 0:
+            return x, faces, None
 
-    All other attributes are carried over unchanged.
-    Returns the cleaned mesh list (originals are not mutated).
-    """
-    meshes = torch.load(path, weights_only=False)
-    cleaned = []
+        new_x = x[keep]
+        new_faces = torch.from_numpy(remap[faces.numpy()])
+        return new_x, new_faces, (
+            f'duplicate_vertices: removed {n_removed} '
+            f'({len(x)} → {len(new_x)})'
+        )
 
-    for i, mesh in enumerate(meshes):
-        new_x, new_faces, n_removed = remove_duplicate_vertices(
-            mesh.x, mesh.faces, decimals=decimals)
+    def _check_isolated_vertices(
+        self, i: int, x: torch.Tensor, faces: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, str | None]:
+        n_verts = len(x)
+        referenced = faces.flatten().unique()
 
-        if n_removed:
-            print(f'[{i}] removed {n_removed} duplicate vertices '
-                  f'({len(mesh.x)} → {len(new_x)})')
+        if len(referenced) == n_verts:
+            return x, faces, None
 
-        m = mesh.clone()
-        m.x = new_x
-        m.faces = new_faces
-        cleaned.append(m)
+        mask = torch.zeros(n_verts, dtype=torch.bool)
+        mask[referenced] = True
 
-    print(f'done — {len(meshes)} meshes processed')
-    return cleaned
+        new_idx = torch.full((n_verts,), -1, dtype=torch.long)
+        new_idx[mask] = torch.arange(mask.sum())
+
+        new_x = x[mask]
+        new_faces = new_idx[faces]
+        n_removed = n_verts - len(new_x)
+        return new_x, new_faces, (
+            f'isolated_vertices: removed {n_removed} '
+            f'({n_verts} → {len(new_x)})'
+        )
+
+    # ------------------------------------------------------------------
+    # Orchestration
+    # ------------------------------------------------------------------
+
+    def _discover_checks(self):
+        return [
+            getattr(self, name)
+            for name in type(self).__dict__
+            if name.startswith('_check_')
+        ]
+
+    def run(self) -> list:
+        checks = self._discover_checks()
+        working = [(m.x, m.faces) for m in self.meshes]
+
+        for check_fn in checks:
+            updated = []
+            for i, (x, faces) in enumerate(working):
+                new_x, new_faces, msg = check_fn(i, x, faces)
+                if msg:
+                    print(f'[mesh {i}] {msg}')
+                updated.append((new_x, new_faces))
+            working = updated
+
+        cleaned = []
+        for mesh, (new_x, new_faces) in zip(self.meshes, working):
+            m = mesh.clone()
+            m.x = new_x
+            m.faces = new_faces
+            cleaned.append(m)
+
+        print(f'done — {len(self.meshes)} meshes processed')
+        return cleaned
+
+    def save(self, cleaned: list, out_path: str | None = None) -> str:
+        if out_path is None:
+            out_path = self.path.replace('.pt', '_cleaned.pt')
+        torch.save(cleaned, out_path)
+        print(f'saved to {out_path}')
+        return out_path
 
 
 if __name__ == '__main__':
-    import sys
     path = sys.argv[1] if len(sys.argv) > 1 else './centered_blades_cleaned.pt'
-    cleaned = check_data(path)
-    out = path.replace('.pt', '_cleaned.pt')
-    torch.save(cleaned, out)
-    print(f'saved to {out}')
+    checker = MeshDataChecker(path)
+    cleaned = checker.run()
+    checker.save(cleaned)
