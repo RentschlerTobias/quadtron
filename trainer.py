@@ -31,7 +31,7 @@ class Trainer:
         max_val_samples=10,
         n_heads=8,
         window_size=None,
-        sorting_strategy=0
+        sorting_strategy=1
 
     ):
         self.verbose = verbose
