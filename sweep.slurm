@@ -27,7 +27,7 @@ set -euo pipefail
 mkdir -p slurm_logs
 
 # --- Environment (adjust to your site) --------------------------------------
-source /mnt/scratch/trentschler/environments/python/env_ai/bin/activate
+source /mnt/scratch/trentschler/environments/python/env_courier/bin/activate
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
 # --- Sweep parameters (override via `--export=ALL,STAGE=stage2,...` or env) -
@@ -49,15 +49,15 @@ echo "[$(date)] host=$(hostname) node=$SLURMD_NODENAME array=$SLURM_ARRAY_TASK_I
 echo "         stage=$STAGE study=$STUDY storage=$STORAGE trials=$TRIALS_PER_TASK"
 
 CMD=(python sweep.py
-     --stage "$STAGE"
-     --storage "$STORAGE"
-     --study-name "$STUDY"
-     --n-trials "$TRIALS_PER_TASK"
-     --trial-epochs "$TRIAL_EPOCHS"
-     --early-stopping-patience "$PATIENCE"
-     --pruner "$PRUNER"
-     --log-dir "$LOG_DIR"
-     --sampler-seed "$SAMPLER_SEED")
+  --stage "$STAGE"
+  --storage "$STORAGE"
+  --study-name "$STUDY"
+  --n-trials "$TRIALS_PER_TASK"
+  --trial-epochs "$TRIAL_EPOCHS"
+  --early-stopping-patience "$PATIENCE"
+  --pruner "$PRUNER"
+  --log-dir "$LOG_DIR"
+  --sampler-seed "$SAMPLER_SEED")
 
 if [[ -n "$BASE_CONFIG" ]]; then
   CMD+=(--base-config "$BASE_CONFIG")

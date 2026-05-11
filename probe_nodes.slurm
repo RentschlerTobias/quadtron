@@ -1,7 +1,6 @@
 #!/bin/bash
 # Probe-Job: submitted ein Array, jede Task loggt auf welchem Node sie
 # gelandet ist, welche GPU sie zugewiesen bekommen hat, und ein paar
-# Resource-Infos. Kein Python, kein Training -- nur Diagnose.
 #
 # Aufruf-Beispiele:
 #   sbatch probe_nodes.slurm
@@ -12,7 +11,7 @@
 # Output landet in slurm_logs/probe_<jobid>_<task>.{out,err}.
 # Nach Lauf:  cat slurm_logs/probe_*.out  oder  ./probe_nodes.slurm summary
 
-#SBATCH --job-name=probe-nodes
+#SBATCH --job-name=gpu-node-test
 #SBATCH --output=slurm_logs/probe_%A_%a.out
 #SBATCH --error=slurm_logs/probe_%A_%a.err
 #SBATCH --array=0-7%8
@@ -28,7 +27,10 @@ if [[ "${1:-}" == "summary" ]]; then
   echo
   echo "=== Recent probe results (slurm_logs/probe_*.out) ====="
   for f in slurm_logs/probe_*.out; do
-    [[ -e "$f" ]] || { echo "(keine Probe-Logs gefunden)"; break; }
+    [[ -e "$f" ]] || {
+      echo "(keine Probe-Logs gefunden)"
+      break
+    }
     echo "--- $f"
     grep -E '^(HOST|GPU|CPU|MEM|FEATURE|PARTITION)' "$f" || true
   done
@@ -53,9 +55,9 @@ echo "DATE       : $(date -Is)"
 echo "------------------------------------------------------------"
 
 echo "FEATURES   :"
-scontrol show node "${SLURMD_NODENAME:-$(hostname)}" \
-  | grep -E 'AvailableFeatures|ActiveFeatures|Gres=|CPUTot|RealMemory|CfgTRES' \
-  || true
+scontrol show node "${SLURMD_NODENAME:-$(hostname)}" |
+  grep -E 'AvailableFeatures|ActiveFeatures|Gres=|CPUTot|RealMemory|CfgTRES' ||
+  true
 
 echo "------------------------------------------------------------"
 echo "CPU info   :"
@@ -69,7 +71,7 @@ echo "------------------------------------------------------------"
 echo "GPU (nvidia-smi):"
 if command -v nvidia-smi >/dev/null 2>&1; then
   nvidia-smi --query-gpu=index,name,uuid,memory.total,driver_version,compute_cap \
-             --format=csv,noheader
+    --format=csv,noheader
   echo
   echo "GPU pid snapshot:"
   nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader || true

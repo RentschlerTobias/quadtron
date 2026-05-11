@@ -26,7 +26,7 @@ class TrainingConfig:
     weight_decay: float = 0.01
     warmup_steps: int = 500
     grad_clip: float = 1.0
-    batch_size: int = 4
+    batch_size: int = 16
     accumulation_steps: int = 1
     num_epochs: int = 15
     early_stopping_patience: int = 25

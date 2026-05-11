@@ -1,0 +1,12 @@
+{
+  "t_total_s": 64.842,
+  "best_val_bpt": 4.597132973881821,
+  "best_val_nll": 3.1864897595053407,
+  "best_val_perplexity": 24.20331868502771,
+  "best_epoch": 3,
+  "final_train_bpt": 5.18513700422764,
+  "final_val_bpt": 4.597132973881821,
+  "epochs_run": 4,
+  "config_hash": "fc93caba",
+  "run_dir": "/mnt/fs2/home/trentschler/ws_meshtron/meshtron/runs/meshtron-stage1/fc93caba"
+}
