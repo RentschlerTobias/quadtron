@@ -81,7 +81,7 @@ def stage2_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
     overrides = dict(
         d_model=int(d_model),
         n_heads=int(n_heads),
-        stage_layers=tuple(layers),
+        stage_layers=tuple(int(l) for l in layers),
     )
     cfg = TrainingConfig.from_dict({**base.to_dict(), **overrides})
     return _run_trial(trial, cfg)
