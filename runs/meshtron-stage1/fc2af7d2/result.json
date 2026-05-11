@@ -1,0 +1,12 @@
+{
+  "t_total_s": 553.641,
+  "best_val_bpt": 0.45601377674492544,
+  "best_val_nll": 0.3160846636472374,
+  "best_val_perplexity": 1.371746387762161,
+  "best_epoch": 19,
+  "final_train_bpt": 0.2778094506381987,
+  "final_val_bpt": 0.45601377674492544,
+  "epochs_run": 20,
+  "config_hash": "fc2af7d2",
+  "run_dir": "/mnt/fs2/home/trentschler/ws_meshtron/meshtron/runs/meshtron-stage1/fc2af7d2"
+}
