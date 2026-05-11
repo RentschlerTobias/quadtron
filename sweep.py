@@ -51,36 +51,37 @@ def _run_trial(trial: optuna.Trial, cfg: TrainingConfig) -> float:
 def stage1_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
     """Regularisation + optimisation search space."""
     overrides = dict(
-        learning_rate=trial.suggest_float("learning_rate", 1e-5, 5e-4, log=True),
+        learning_rate=trial.suggest_float(
+            "learning_rate", 1e-5, 5e-4, log=True),
         warmup_steps=trial.suggest_int("warmup_steps", 0, 2000, step=100),
         dropout=trial.suggest_float("dropout", 0.0, 0.3),
         weight_decay=trial.suggest_float("weight_decay", 0.0, 0.1),
-        n_latents=trial.suggest_categorical("n_latents", [16, 32, 64, 128, 256]),
+        n_latents=trial.suggest_categorical(
+            "n_latents", [8, 16, 32, 64]),
     )
     cfg = TrainingConfig.from_dict({**base.to_dict(), **overrides})
     return _run_trial(trial, cfg)
 
 
-_DEPTH_PRESETS = {
-    "4-4-4": (4, 4, 4),
-    "6-6-6": (6, 6, 6),
-    "8-8-8": (8, 8, 8),
-    "4-8-4": (4, 8, 4),
-    "12":    (12,),
-    "16":    (16,),
-}
+_LAYER_OPTIONS = [2, 4, 6]
 
 
 def stage2_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
-    """Architecture search. Keeps head_dim ~64 by deriving n_heads from d_model."""
+    """Architecture search. Number of stages and layers per stage are independent."""
     d_model = trial.suggest_categorical("d_model", [256, 384, 512, 768])
     n_heads = max(1, d_model // 64)
-    preset = trial.suggest_categorical("stage_layers", list(_DEPTH_PRESETS.keys()))
+
+    n_stages = trial.suggest_int("n_stages", 2, 5)
+
+    layers = [
+        trial.suggest_categorical(f"layer_{i}", _LAYER_OPTIONS)
+        for i in range(n_stages)
+    ]
 
     overrides = dict(
         d_model=int(d_model),
         n_heads=int(n_heads),
-        stage_layers=_DEPTH_PRESETS[preset],
+        stage_layers=tuple(layers),
     )
     cfg = TrainingConfig.from_dict({**base.to_dict(), **overrides})
     return _run_trial(trial, cfg)
@@ -89,24 +90,29 @@ def stage2_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
 def stage3_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
     """Fine-tune: learning rate, warmup, batch size, regularization."""
     overrides = dict(
-        learning_rate=trial.suggest_float("learning_rate", 1e-4, 5e-4, log=True),
+        learning_rate=trial.suggest_float(
+            "learning_rate", 1e-4, 5e-4, log=True),
         warmup_steps=trial.suggest_int("warmup_steps", 0, 1000, step=100),
-        weight_decay=trial.suggest_float("weight_decay", 0.001, 0.05, log=True),
+        weight_decay=trial.suggest_float(
+            "weight_decay", 0.001, 0.05, log=True),
         dropout=trial.suggest_float("dropout", 0.0, 0.2),
         batch_size=trial.suggest_categorical("batch_size", [8, 16, 32]),
-        accumulation_steps=trial.suggest_categorical("accumulation_steps", [1, 2, 4]),
+        accumulation_steps=trial.suggest_categorical(
+            "accumulation_steps", [1, 2, 4]),
     )
     cfg = TrainingConfig.from_dict({**base.to_dict(), **overrides})
     return _run_trial(trial, cfg)
 
 
-OBJECTIVES = {"stage1": stage1_objective, "stage2": stage2_objective, "stage3": stage3_objective}
+OBJECTIVES = {"stage1": stage1_objective,
+              "stage2": stage2_objective, "stage3": stage3_objective}
 
 
 # ------------------------------------------------------------------ driver
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Optuna sweep over TrainingConfig.")
+    p = argparse.ArgumentParser(
+        description="Optuna sweep over TrainingConfig.")
     p.add_argument("--stage", choices=list(OBJECTIVES), default="stage1")
     p.add_argument("--storage", type=str, default="sqlite:///sweep.db",
                    help="Optuna storage URL (sqlite:///path.db or postgresql://...).")
@@ -123,7 +129,8 @@ def parse_args() -> argparse.Namespace:
                         "fields outside the search space are inherited.")
     p.add_argument("--log-dir", type=str, default="runs",
                    help="Parent dir for per-trial Trainer run directories.")
-    p.add_argument("--pruner", choices=["median", "hyperband", "none"], default="median")
+    p.add_argument(
+        "--pruner", choices=["median", "hyperband", "none"], default="median")
     p.add_argument("--sampler-seed", type=int, default=0,
                    help="Seed for Optuna's TPE sampler (sampling reproducibility).")
     return p.parse_args()
