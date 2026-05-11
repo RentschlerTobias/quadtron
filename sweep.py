@@ -86,7 +86,21 @@ def stage2_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
     return _run_trial(trial, cfg)
 
 
-OBJECTIVES = {"stage1": stage1_objective, "stage2": stage2_objective}
+def stage3_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
+    """Fine-tune: learning rate, warmup, batch size, regularization."""
+    overrides = dict(
+        learning_rate=trial.suggest_float("learning_rate", 1e-4, 5e-4, log=True),
+        warmup_steps=trial.suggest_int("warmup_steps", 0, 1000, step=100),
+        weight_decay=trial.suggest_float("weight_decay", 0.001, 0.05, log=True),
+        dropout=trial.suggest_float("dropout", 0.0, 0.2),
+        batch_size=trial.suggest_categorical("batch_size", [8, 16, 32]),
+        accumulation_steps=trial.suggest_categorical("accumulation_steps", [1, 2, 4]),
+    )
+    cfg = TrainingConfig.from_dict({**base.to_dict(), **overrides})
+    return _run_trial(trial, cfg)
+
+
+OBJECTIVES = {"stage1": stage1_objective, "stage2": stage2_objective, "stage3": stage3_objective}
 
 
 # ------------------------------------------------------------------ driver
