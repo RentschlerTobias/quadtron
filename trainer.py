@@ -71,7 +71,7 @@ class Trainer:
         ) = self._build_loaders()
 
         self.model = Meshtron(
-            vocab_size=cfg.quantization + 3,
+            vocab_size=self.tokenizer.vocab_size,
             d_model=cfg.d_model,
             max_seq_length=self.max_length,
             n_latents=cfg.n_latents,

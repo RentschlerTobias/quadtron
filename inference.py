@@ -62,7 +62,7 @@ def load_run(run_dir: Path, ckpt_name: str, device: torch.device) -> Tuple[Mesht
     )
 
     model = Meshtron(
-        vocab_size=cfg.quantization + 3,
+        vocab_size=tokenizer.vocab_size,
         d_model=cfg.d_model,
         max_seq_length=ckpt["max_seq_length"],
         n_latents=cfg.n_latents,

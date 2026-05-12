@@ -11,14 +11,17 @@ class Tokenizer2D:
                  n_start_end_tokens_repeat: Optional[int] = 8, sorting_strategy: int = 1):
         """
         Args:
-            sorting_strategy: 0 = lexicographical (baseline/standard), 1 = Directed row traversal
+            sorting_strategy: 0 = lexicographical (baseline), 1 = directed row traversal
+                              (full 8 tokens/face), 2 = directed row traversal with
+                              row-compressed emission (4 tokens/face mid-row + eor token).
         """
         self.verbose = verbose
         self.tokens_per_face = 8
         self.start_token = quantization_levels
         self.end_token = quantization_levels + 1
-        self.pad_token = quantization_levels + 2
-        self.vocab_size = quantization_levels + 3
+        self.eor_token = quantization_levels + 2
+        self.pad_token = quantization_levels + 3
+        self.vocab_size = quantization_levels + 4
         self.quantization_levels = quantization_levels
         self.n_start_end_tokens_repeat = n_start_end_tokens_repeat
         self.sorting_strategy = sorting_strategy
@@ -43,11 +46,11 @@ class Tokenizer2D:
         if self.verbose:
             print('start tokenizing the mesh')
 
-        sorted_quads = self._order_quads(vertices, quads)
+        sorted_quads, rows = self._order_quads(vertices, quads)
 
         coord_sequence = self._quads_to_coords(vertices, sorted_quads)
         quantized_coords, self.bounds = self._quantize_coords(coord_sequence)
-        tokens = self._build_token_sequence(quantized_coords)
+        tokens = self._build_token_sequence(quantized_coords, rows)
 
         if self.max_length_token_sequence < len(tokens):
             self.max_length_token_sequence = len(tokens)
@@ -67,14 +70,19 @@ class Tokenizer2D:
         if self.sorting_strategy == 0:
             if self.verbose:
                 print("Using lexicographical sorting (Strategy 0)")
-            return self._order_quads_lexicographical(vertices, quads)
+            return self._order_quads_lexicographical(vertices, quads), None
         elif self.sorting_strategy == 1:
             if self.verbose:
                 print("Adjacent face based directed row ordering (Strategy 1)")
-            return self._order_quads_adjacent(vertices, quads)
+            quads_ordered, _rows = self._order_quads_adjacent(vertices, quads)
+            return quads_ordered, None  # strategy 1 keeps uncompressed emission
+        elif self.sorting_strategy == 2:
+            if self.verbose:
+                print("Adjacent rows with row-compressed emission (Strategy 2)")
+            return self._order_quads_compressed(vertices, quads)
         else:
             raise ValueError(f"Unknown sorting_strategy={
-                             self.sorting_strategy}. Must be 0 or 1.")
+                             self.sorting_strategy}. Must be 0, 1, or 2.")
 
     def _order_quads_lexicographical(self, vertices: torch.Tensor, quads: torch.Tensor):
         """standard face sorting."""
@@ -99,13 +107,76 @@ class Tokenizer2D:
         return ordered_quads[quad_order]
 
     def _order_quads_adjacent(self, vertices: torch.Tensor, quads: torch.Tensor):
-        """Strategy 1: directed row traversal via opposite half-edge (half_edge.py)."""
-        sorted_quads = order_quads_yx(vertices, quads)  # [4, n]
-        reordered = self._shared_edge_vertex_order(
-            vertices, sorted_quads.T)  # [n, 4]
-        return reordered
+        """Directed row traversal via opposite half-edge (half_edge.py).
 
-    def _shared_edge_vertex_order(self, vertices: torch.Tensor, ordered_quads: torch.Tensor) -> torch.Tensor:
+        Returns:
+            (reordered, rows) where reordered is [n, 4] and rows is a list of
+            (start, end) face-index slices per row.
+        """
+        sorted_quads = order_quads_yx(vertices, quads)  # [4, n]
+        reordered, rows = self._shared_edge_vertex_order(
+            vertices, sorted_quads.T)  # [n, 4], list[tuple]
+        return reordered, rows
+
+    def _order_quads_compressed(self, vertices: torch.Tensor, quads: torch.Tensor):
+        """Strategy 2 ordering. Uses the strip traversal from order_quads_yx, then
+        enforces per-face that v0, v1 = reversed exit of previous face (v3, v2).
+        When the next face does not actually share that edge, a new compression
+        row is started (signalled to the encoder via the returned `rows` list).
+        """
+        import math
+        sorted_quads = order_quads_yx(vertices, quads).T.tolist()  # [n][4] verts
+        n = len(sorted_quads)
+
+        def ccw_ring(verts):
+            cx = sum(vertices[v][0].item() for v in verts) / 4
+            cy = sum(vertices[v][1].item() for v in verts) / 4
+            return sorted(verts, key=lambda v: math.atan2(
+                vertices[v][1].item() - cy, vertices[v][0].item() - cx))
+
+        def row_start_arrange(face_verts):
+            # canonical row-start: CW from min-y, min-x (matches strategy-1 default)
+            ring = ccw_ring(face_verts)[::-1]  # CW
+            start_v = min(face_verts, key=lambda v: (
+                vertices[v][1].item(), vertices[v][0].item()))
+            i = ring.index(start_v)
+            return ring[i:] + ring[:i]
+
+        def continuation_arrange(prev_face, cur_face_verts):
+            """Try to arrange cur so v0=prev[3], v1=prev[2], with v2,v3 along the
+            face ring. Return arranged list, or None if entrance edge not shared.
+            """
+            v0_target = prev_face[3]
+            v1_target = prev_face[2]
+            if v0_target not in cur_face_verts or v1_target not in cur_face_verts:
+                return None
+            ring = ccw_ring(cur_face_verts)
+            i0 = ring.index(v0_target)
+            if ring[(i0 + 1) % 4] == v1_target:
+                return [ring[(i0 + k) % 4] for k in range(4)]
+            if ring[(i0 - 1) % 4] == v1_target:
+                return [ring[(i0 - k) % 4] for k in range(4)]
+            return None  # v0, v1 not adjacent → not a shared edge
+
+        result: List[List[int]] = []
+        rows: List[Tuple[int, int]] = []
+        row_start = 0
+        for idx in range(n):
+            face_verts = sorted_quads[idx]
+            arranged = None
+            if idx > row_start:  # try continuation within current compression row
+                arranged = continuation_arrange(result[-1], face_verts)
+            if arranged is None:
+                if idx > row_start:
+                    rows.append((row_start, idx))
+                    row_start = idx
+                arranged = row_start_arrange(face_verts)
+            result.append(arranged)
+        rows.append((row_start, n))
+
+        return torch.tensor(result, dtype=torch.long), rows
+
+    def _shared_edge_vertex_order(self, vertices: torch.Tensor, ordered_quads: torch.Tensor):
         """
         Reorder vertices within each face based on row direction:
           - row goes min-x → max-x: start at BL (min y, min x), CW order
@@ -161,7 +232,7 @@ class Tokenizer2D:
             for i in range(s, e):
                 result.append(arrange(quads_list[i], direction))
 
-        return torch.tensor(result, dtype=torch.long)
+        return torch.tensor(result, dtype=torch.long), rows
 
     def _ensure_counter_clockwise(self, coords: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
         centroid = coords.mean(dim=0)
@@ -195,24 +266,86 @@ class Tokenizer2D:
 
         return quantized, bounds
 
-    def _build_token_sequence(self, quantized_coords: torch.Tensor) -> List[int]:
+    def _build_token_sequence(self, quantized_coords: torch.Tensor,
+                              rows: Optional[List[Tuple[int, int]]] = None) -> List[int]:
         tokens = [self.start_token] * self.n_start_end_tokens_repeat
-        for coord_pair in quantized_coords:
-            tokens.extend([int(coord_pair[1]), int(coord_pair[0])])
+
+        if rows is None:
+            for coord_pair in quantized_coords:
+                tokens.extend([int(coord_pair[1]), int(coord_pair[0])])
+        else:
+            # Strategy 2: row-compressed. quantized_coords is [4 * n_faces, 2].
+            # For each row, emit the first face fully (4 verts) and each
+            # subsequent face's last 2 verts only; append eor at row end.
+            for s, e in rows:
+                for face_idx in range(s, e):
+                    base = face_idx * 4
+                    v_start = 0 if face_idx == s else 2
+                    for v in range(v_start, 4):
+                        cp = quantized_coords[base + v]
+                        tokens.extend([int(cp[1]), int(cp[0])])
+                tokens.append(self.eor_token)
+
         tokens.extend([self.end_token] * self.n_start_end_tokens_repeat)
         return tokens
 
-    def detokenize(self, tokens: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
-        coord_tokens = []
+    def _decode_compressed_coords(self, tokens: List[int]) -> List[int]:
+        """Reconstruct the flat coord-token stream from a strategy-2 sequence.
+
+        Within a row, the first 4 coord tokens of a non-start face are implicit
+        (= reversed last edge of previous face). Returns 8 tokens per face,
+        matching the layout strategy 0/1 produce.
+        """
+        coord_tokens: List[int] = []
+        pending: List[int] = []
+        prev_face: List[int] = []
+        expected = 8  # row-start expects 8 fresh coord tokens
         in_coords = False
+
         for token in tokens:
             if token == self.start_token:
                 in_coords = True
                 continue
-            elif token == self.end_token:
+            if not in_coords:
+                continue
+            if token == self.end_token:
                 break
-            elif in_coords and token < self.quantization_levels:
-                coord_tokens.append(token)
+            if token == self.eor_token:
+                # Discard any incomplete face from prior row; next face is row-start.
+                pending = []
+                expected = 8
+                continue
+            if token >= self.quantization_levels:
+                continue  # pad or anything else non-coord
+            pending.append(int(token))
+            if len(pending) == expected:
+                if expected == 8:
+                    face = pending
+                else:
+                    # mid-row: prepend reversed last edge of prev face
+                    # prev_face: [v0y,v0x, v1y,v1x, v2y,v2x, v3y,v3x]
+                    # entrance = reversed(v2,v3) = (v3,v2) -> [v3y,v3x, v2y,v2x]
+                    face = prev_face[6:8] + prev_face[4:6] + pending
+                coord_tokens.extend(face)
+                prev_face = face
+                pending = []
+                expected = 4  # subsequent faces in row are compressed
+        return coord_tokens
+
+    def detokenize(self, tokens: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.sorting_strategy == 2:
+            coord_tokens = self._decode_compressed_coords(tokens)
+        else:
+            coord_tokens = []
+            in_coords = False
+            for token in tokens:
+                if token == self.start_token:
+                    in_coords = True
+                    continue
+                elif token == self.end_token:
+                    break
+                elif in_coords and token < self.quantization_levels:
+                    coord_tokens.append(token)
 
         num_full_quads = len(coord_tokens) // 8
         coord_tokens = coord_tokens[:num_full_quads * 8]
@@ -273,16 +406,19 @@ class Tokenizer2D:
 
     def detokenize_ordered(self, tokens: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
         """Like detokenize but preserves vertex order from the token sequence (no CCW reorder)."""
-        coord_tokens = []
-        in_coords = False
-        for token in tokens:
-            if token == self.start_token:
-                in_coords = True
-                continue
-            elif token == self.end_token:
-                break
-            elif in_coords and token < self.quantization_levels:
-                coord_tokens.append(token)
+        if self.sorting_strategy == 2:
+            coord_tokens = self._decode_compressed_coords(tokens)
+        else:
+            coord_tokens = []
+            in_coords = False
+            for token in tokens:
+                if token == self.start_token:
+                    in_coords = True
+                    continue
+                elif token == self.end_token:
+                    break
+                elif in_coords and token < self.quantization_levels:
+                    coord_tokens.append(token)
 
         num_full_quads = len(coord_tokens) // 8
         coord_tokens = coord_tokens[:num_full_quads * 8]

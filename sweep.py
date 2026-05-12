@@ -44,6 +44,8 @@ def _run_trial(trial: optuna.Trial, cfg: TrainingConfig) -> float:
     trainer = Trainer(cfg)
     trial.set_user_attr("config_hash", cfg.hash())
     trial.set_user_attr("run_dir", str(trainer.logger.run_dir))
+    trial.set_user_attr("max_seq_length", int(trainer.max_length))
+    trial.set_user_attr("vocab_size", int(trainer.tokenizer.vocab_size))
     result = trainer.run(on_epoch=_make_on_epoch(trial))
     return result.best_val_bpt
 
@@ -104,8 +106,18 @@ def stage3_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
     return _run_trial(trial, cfg)
 
 
+def sorting_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
+    """Compare full vs row-compressed encoding on otherwise identical configs."""
+    overrides = dict(
+        sorting_strategy=trial.suggest_categorical("sorting_strategy", [1, 2]),
+    )
+    cfg = TrainingConfig.from_dict({**base.to_dict(), **overrides})
+    return _run_trial(trial, cfg)
+
+
 OBJECTIVES = {"stage1": stage1_objective,
-              "stage2": stage2_objective, "stage3": stage3_objective}
+              "stage2": stage2_objective,
+              "sorting": sorting_objective}
 
 
 # ------------------------------------------------------------------ driver
