@@ -120,9 +120,10 @@ class Tokenizer2D:
 
     def _order_quads_compressed(self, vertices: torch.Tensor, quads: torch.Tensor):
         """Strategy 2 ordering. Uses the strip traversal from order_quads_yx, then
-        enforces per-face that v0, v1 = reversed exit of previous face (v3, v2).
-        When the next face does not actually share that edge, a new compression
-        row is started (signalled to the encoder via the returned `rows` list).
+        arranges each face so that v0, v1 = reversed exit of previous face (v3, v2)
+        and v2, v3 = edge shared with the NEXT face (lookahead). When neither
+        constraint can be satisfied, a new compression row is started (signalled
+        via the returned `rows` list).
         """
         import math
         sorted_quads = order_quads_yx(vertices, quads).T.tolist()  # [n][4] verts
@@ -134,18 +135,48 @@ class Tokenizer2D:
             return sorted(verts, key=lambda v: math.atan2(
                 vertices[v][1].item() - cy, vertices[v][0].item() - cx))
 
-        def row_start_arrange(face_verts):
-            # canonical row-start: CW from min-y, min-x (matches strategy-1 default)
-            ring = ccw_ring(face_verts)[::-1]  # CW
+        def shared_edge(a, b):
+            s = set(a) & set(b)
+            return tuple(s) if len(s) == 2 else None
+
+        def arrange_with_exit(face_verts, exit_a, exit_b):
+            """Arrange so v2=exit_a, v3=exit_b, traversing the face cycle.
+            Returns [v0,v1,v2,v3] or None if (exit_a, exit_b) not an edge of face."""
+            ring = ccw_ring(face_verts)
+            if exit_a not in ring or exit_b not in ring:
+                return None
+            ia, ib = ring.index(exit_a), ring.index(exit_b)
+            if (ib - ia) % 4 == 1:
+                # CCW order: v0,v1,v2,v3 = ring[ia+2], ring[ia+3], ring[ia], ring[ib]
+                return [ring[(ia + 2) % 4], ring[(ia + 3) % 4], ring[ia], ring[ib]]
+            if (ia - ib) % 4 == 1:
+                # CW order
+                return [ring[(ia + 2) % 4], ring[(ia + 1) % 4], ring[ia], ring[ib]]
+            return None  # diagonal — not an edge
+
+        def arrange_canonical(face_verts):
+            # CW from min-y, min-x (fallback when no neighbour constraint exists)
+            ring = ccw_ring(face_verts)[::-1]
             start_v = min(face_verts, key=lambda v: (
                 vertices[v][1].item(), vertices[v][0].item()))
             i = ring.index(start_v)
             return ring[i:] + ring[:i]
 
+        def arrange_row_start(face_verts, next_face_verts):
+            """Row start: orient so exit edge = edge shared with next face."""
+            if next_face_verts is not None:
+                s = shared_edge(face_verts, next_face_verts)
+                if s is not None:
+                    a, b = s
+                    arr = arrange_with_exit(face_verts, a, b)
+                    if arr is not None:
+                        return arr
+                    arr = arrange_with_exit(face_verts, b, a)
+                    if arr is not None:
+                        return arr
+            return arrange_canonical(face_verts)
+
         def continuation_arrange(prev_face, cur_face_verts):
-            """Try to arrange cur so v0=prev[3], v1=prev[2], with v2,v3 along the
-            face ring. Return arranged list, or None if entrance edge not shared.
-            """
             v0_target = prev_face[3]
             v1_target = prev_face[2]
             if v0_target not in cur_face_verts or v1_target not in cur_face_verts:
@@ -156,21 +187,22 @@ class Tokenizer2D:
                 return [ring[(i0 + k) % 4] for k in range(4)]
             if ring[(i0 - 1) % 4] == v1_target:
                 return [ring[(i0 - k) % 4] for k in range(4)]
-            return None  # v0, v1 not adjacent → not a shared edge
+            return None
 
         result: List[List[int]] = []
         rows: List[Tuple[int, int]] = []
         row_start = 0
         for idx in range(n):
             face_verts = sorted_quads[idx]
+            next_face = sorted_quads[idx + 1] if idx + 1 < n else None
             arranged = None
-            if idx > row_start:  # try continuation within current compression row
+            if idx > row_start:
                 arranged = continuation_arrange(result[-1], face_verts)
-            if arranged is None:
-                if idx > row_start:
+                if arranged is None:
                     rows.append((row_start, idx))
                     row_start = idx
-                arranged = row_start_arrange(face_verts)
+            if arranged is None:
+                arranged = arrange_row_start(face_verts, next_face)
             result.append(arranged)
         rows.append((row_start, n))
 
