@@ -115,9 +115,38 @@ def sorting_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
     return _run_trial(trial, cfg)
 
 
+def all_stages_objective(trial: optuna.Trial, base: TrainingConfig) -> float:
+    """Optimize all parameters from stage1, stage2 and sorting simultaneously."""
+    d_model = trial.suggest_categorical("d_model", [256, 384, 512])
+    n_heads = max(1, d_model // 64)
+
+    n_stages = trial.suggest_int("n_stages", 3, 5)
+    layers = [
+        trial.suggest_categorical(f"layer_{i}", _LAYER_OPTIONS)
+        for i in range(n_stages)
+    ]
+
+    overrides = dict(
+        d_model=int(d_model),
+        n_heads=int(n_heads),
+        stage_layers=tuple(int(l) for l in layers),
+        learning_rate=trial.suggest_float(
+            "learning_rate", 1e-5, 5e-4, log=True),
+        warmup_steps=trial.suggest_int("warmup_steps", 0, 2000, step=100),
+        dropout=trial.suggest_float("dropout", 0.0, 0.3),
+        weight_decay=trial.suggest_float("weight_decay", 0.0, 0.1),
+        n_latents=trial.suggest_categorical(
+            "n_latents", [8, 16, 32, 64]),
+        sorting_strategy=trial.suggest_categorical("sorting_strategy", [1, 2]),
+    )
+    cfg = TrainingConfig.from_dict({**base.to_dict(), **overrides})
+    return _run_trial(trial, cfg)
+
+
 OBJECTIVES = {"stage1": stage1_objective,
               "stage2": stage2_objective,
-              "sorting": sorting_objective}
+              "sorting": sorting_objective,
+              "all": all_stages_objective}
 
 
 # ------------------------------------------------------------------ driver
@@ -125,7 +154,11 @@ OBJECTIVES = {"stage1": stage1_objective,
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Optuna sweep over TrainingConfig.")
-    p.add_argument("--stage", choices=list(OBJECTIVES), default="stage1")
+    p.add_argument("--stage", choices=list(OBJECTIVES), default="stage1",
+                   help="stage1: lr/warmup/dropout/weight_decay/n_latents, "
+                        "stage2: d_model/n_heads/n_stages/stage_layers, "
+                        "sorting: sorting_strategy, "
+                        "all: all parameters from stage1+stage2+sorting")
     p.add_argument("--storage", type=str, default="sqlite:///sweep.db",
                    help="Optuna storage URL (sqlite:///path.db or postgresql://...).")
     p.add_argument("--study-name", type=str, default=None,
