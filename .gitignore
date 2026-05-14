@@ -4,3 +4,4 @@ figures/
 *.pyc
 *.log
 *.png
+*.pt
