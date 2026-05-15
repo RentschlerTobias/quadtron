@@ -6,7 +6,12 @@
   "n_sample_points": 1000,
   "d_model": 384,
   "n_heads": 6,
-  "stage_layers": [4, 6, 6, 2],
+  "stage_layers": [
+    4,
+    6,
+    6,
+    2
+  ],
   "n_latents": 64,
   "dropout": 0.2000300146337003,
   "ffn_mult": 4,

@@ -6,7 +6,12 @@
   "n_sample_points": 1000,
   "d_model": 384,
   "n_heads": 6,
-  "stage_layers": [4, 6, 6, 2],
+  "stage_layers": [
+    4,
+    6,
+    6,
+    2
+  ],
   "n_latents": 64,
   "dropout": 0.2000300146337003,
   "ffn_mult": 4,
@@ -14,7 +19,7 @@
   "weight_decay": 0.06706378696181595,
   "warmup_steps": 100,
   "grad_clip": 1.0,
-  "batch_size": 48,
+  "batch_size": 24,
   "accumulation_steps": 1,
   "num_epochs": 25,
   "early_stopping_patience": 10,
