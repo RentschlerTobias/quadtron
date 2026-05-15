@@ -56,6 +56,12 @@ def parse_args() -> argparse.Namespace:
                    help="Override num_epochs from base config.")
     p.add_argument("--log-dir", type=str, default=None,
                    help="Override log_dir from base config.")
+    p.add_argument("--batch-size", type=int, default=None,
+                   help="Override batch_size from base config (same value for "
+                        "every cell in this invocation).")
+    p.add_argument("--scenario", type=str, default="fixed_batch",
+                   help="Tag stored on every row; used by analyze_sorting.py "
+                        "to group results (e.g. 'fixed_batch', 'mem_matched').")
     p.add_argument("--summary-path", type=Path,
                    default=Path("runs/meshtron-sorting-fair/summary.jsonl"),
                    help="Append one JSON line per run here.")
@@ -63,7 +69,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def run_one(base: TrainingConfig, seed: int, strategy: int,
-            trial_epochs: int | None, log_dir: str | None) -> dict:
+            trial_epochs: int | None, log_dir: str | None,
+            batch_size: int | None, scenario: str) -> dict:
     overrides: dict = {
         **base.to_dict(),
         "seed": seed,
@@ -73,6 +80,8 @@ def run_one(base: TrainingConfig, seed: int, strategy: int,
         overrides["num_epochs"] = trial_epochs
     if log_dir is not None:
         overrides["log_dir"] = log_dir
+    if batch_size is not None:
+        overrides["batch_size"] = batch_size
     cfg = TrainingConfig.from_dict(overrides)
 
     if torch.cuda.is_available():
@@ -101,8 +110,10 @@ def run_one(base: TrainingConfig, seed: int, strategy: int,
     )
 
     return {
+        "scenario": scenario,
         "seed": seed,
         "sorting_strategy": strategy,
+        "batch_size": int(cfg.batch_size),
         "config_hash": result.config_hash,
         "run_dir": result.run_dir,
         "best_val_bpt": result.best_val_bpt,
@@ -157,6 +168,8 @@ def main() -> None:
             strategy=strategy,
             trial_epochs=args.trial_epochs,
             log_dir=args.log_dir,
+            batch_size=args.batch_size,
+            scenario=args.scenario,
         )
         _append_row(args.summary_path, row)
         print(json.dumps(row, indent=2, default=str))

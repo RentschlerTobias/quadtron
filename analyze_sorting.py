@@ -81,30 +81,40 @@ def _agg(values: list[float]) -> tuple[float, float, int]:
     return mean(values), stdev(values), len(values)
 
 
-def aggregate(rows: list[dict]) -> dict[int, dict[str, tuple[float, float, int]]]:
-    by_strat: dict[int, list[dict]] = {}
+Group = tuple[str, int]  # (scenario, strategy)
+
+
+def aggregate(rows: list[dict]) -> dict[Group, dict[str, tuple[float, float, int]]]:
+    by_group: dict[Group, list[dict]] = {}
     for r in rows:
-        by_strat.setdefault(int(r["sorting_strategy"]), []).append(r)
-    summary: dict[int, dict[str, tuple[float, float, int]]] = {}
-    for strat, rs in by_strat.items():
-        summary[strat] = {
+        scen = str(r.get("scenario", "fixed_batch"))
+        strat = int(r["sorting_strategy"])
+        by_group.setdefault((scen, strat), []).append(r)
+    summary: dict[Group, dict[str, tuple[float, float, int]]] = {}
+    for group, rs in by_group.items():
+        summary[group] = {
             key: _agg([float(r[key]) for r in rs if key in r])
             for key, *_ in METRICS
         }
     return summary
 
 
-def print_table(summary: dict[int, dict[str, tuple[float, float, int]]]) -> None:
-    strategies = sorted(summary.keys())
-    header_strats = [STRATEGY_LABEL.get(s, f"strategy {s}") for s in strategies]
-    col_w = max(28, *(len(h) for h in header_strats)) + 2
+def _group_label(group: Group) -> str:
+    scenario, strategy = group
+    return f"{scenario} | {STRATEGY_LABEL.get(strategy, f'strategy {strategy}')}"
 
-    print(f"{'metric':<22} | " + " | ".join(f"{h:<{col_w}}" for h in header_strats))
-    print("-" * (22 + 3 + (col_w + 3) * len(strategies)))
+
+def print_table(summary: dict[Group, dict[str, tuple[float, float, int]]]) -> None:
+    groups = sorted(summary.keys())
+    headers = [_group_label(g) for g in groups]
+    col_w = max(28, *(len(h) for h in headers)) + 2
+
+    print(f"{'metric':<22} | " + " | ".join(f"{h:<{col_w}}" for h in headers))
+    print("-" * (22 + 3 + (col_w + 3) * len(groups)))
     for key, label, direction, _ in METRICS:
         cells = []
-        for s in strategies:
-            m, sd, n = summary[s][key]
+        for g in groups:
+            m, sd, n = summary[g][key]
             if math.isnan(m):
                 cells.append(f"{'n/a':<{col_w}}")
             elif n <= 1:
@@ -114,55 +124,61 @@ def print_table(summary: dict[int, dict[str, tuple[float, float, int]]]) -> None
         print(f"{label:<22} | " + " | ".join(cells) + f"   {direction}")
 
 
-def _ratio_line(summary: dict[int, dict[str, tuple[float, float, int]]]) -> None:
-    if 1 not in summary or 2 not in summary:
-        return
-    print("\nratios strategy 2 / strategy 1 (lower < 1 means strategy 2 wins):")
-    for key, label, *_ in METRICS:
-        m1, _, _ = summary[1][key]
-        m2, _, _ = summary[2][key]
-        if not (math.isfinite(m1) and math.isfinite(m2)) or m1 == 0:
+def _ratio_lines(summary: dict[Group, dict[str, tuple[float, float, int]]]) -> None:
+    scenarios = sorted({g[0] for g in summary})
+    for scen in scenarios:
+        if (scen, 1) not in summary or (scen, 2) not in summary:
             continue
-        print(f"  {label:<22}  {m2 / m1:.3f}")
+        print(f"\nratios strategy 2 / strategy 1 in scenario '{scen}' "
+              "(lower < 1 means strategy 2 wins):")
+        for key, label, *_ in METRICS:
+            m1, _, _ = summary[(scen, 1)][key]
+            m2, _, _ = summary[(scen, 2)][key]
+            if not (math.isfinite(m1) and math.isfinite(m2)) or m1 == 0:
+                continue
+            print(f"  {label:<22}  {m2 / m1:.3f}")
 
 
-def write_csv(summary: dict[int, dict[str, tuple[float, float, int]]],
+def write_csv(summary: dict[Group, dict[str, tuple[float, float, int]]],
               out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    cols = ["strategy"] + [f"{k}_mean" for k, *_ in METRICS] \
-                       + [f"{k}_std"  for k, *_ in METRICS] \
-                       + [f"{k}_n"    for k, *_ in METRICS]
+    cols = ["scenario", "strategy"] \
+        + [f"{k}_mean" for k, *_ in METRICS] \
+        + [f"{k}_std"  for k, *_ in METRICS] \
+        + [f"{k}_n"    for k, *_ in METRICS]
     with out_path.open("w") as f:
         f.write(",".join(cols) + "\n")
-        for s in sorted(summary.keys()):
-            row = [str(s)]
-            row += [f"{summary[s][k][0]}" for k, *_ in METRICS]
-            row += [f"{summary[s][k][1]}" for k, *_ in METRICS]
-            row += [f"{summary[s][k][2]}" for k, *_ in METRICS]
+        for (scen, strat) in sorted(summary.keys()):
+            row = [scen, str(strat)]
+            row += [f"{summary[(scen, strat)][k][0]}" for k, *_ in METRICS]
+            row += [f"{summary[(scen, strat)][k][1]}" for k, *_ in METRICS]
+            row += [f"{summary[(scen, strat)][k][2]}" for k, *_ in METRICS]
             f.write(",".join(row) + "\n")
 
 
-def plot(summary: dict[int, dict[str, tuple[float, float, int]]],
+def plot(summary: dict[Group, dict[str, tuple[float, float, int]]],
          out_path: Path) -> None:
     plotted = [m for m in METRICS if m[3]]
-    strategies = sorted(summary.keys())
-    labels = [STRATEGY_LABEL.get(s, f"strategy {s}") for s in strategies]
+    groups = sorted(summary.keys())
+    labels = [_group_label(g) for g in groups]
+    palette = ["#4C72B0", "#DD8452", "#55A868", "#C44E52",
+               "#8172B2", "#937860", "#DA8BC3", "#8C8C8C"]
+    colors = [palette[i % len(palette)] for i in range(len(groups))]
 
-    fig, axes = plt.subplots(1, len(plotted), figsize=(3.2 * len(plotted), 3.6))
+    fig, axes = plt.subplots(1, len(plotted), figsize=(3.6 * len(plotted), 4.0))
     if len(plotted) == 1:
         axes = [axes]
 
     for ax, (key, label, _direction, _) in zip(axes, plotted):
-        means = [summary[s][key][0] for s in strategies]
-        stds  = [summary[s][key][1] for s in strategies]
-        bars = ax.bar(labels, means, yerr=stds, capsize=4,
-                      color=["#4C72B0", "#DD8452"][:len(strategies)])
+        means = [summary[g][key][0] for g in groups]
+        stds  = [summary[g][key][1] for g in groups]
+        bars = ax.bar(labels, means, yerr=stds, capsize=4, color=colors)
         ax.set_title(label, fontsize=10)
-        ax.tick_params(axis="x", labelsize=8, rotation=15)
+        ax.tick_params(axis="x", labelsize=7, rotation=25)
         for b, m in zip(bars, means):
             if math.isfinite(m):
                 ax.text(b.get_x() + b.get_width() / 2, m, f"{m:.3g}",
-                        ha="center", va="bottom", fontsize=8)
+                        ha="center", va="bottom", fontsize=7)
 
     fig.suptitle("Sorting strategy comparison (mean +/- std across seeds)",
                  fontsize=11)
@@ -187,7 +203,7 @@ def main() -> None:
     print(f"loaded {len(rows)} run(s) from {args.summary_path}\n")
     summary = aggregate(rows)
     print_table(summary)
-    _ratio_line(summary)
+    _ratio_lines(summary)
 
     write_csv(summary, out_dir / "aggregate.csv")
     print(f"\nwrote {out_dir / 'aggregate.csv'}")
