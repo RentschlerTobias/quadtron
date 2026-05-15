@@ -1,0 +1,12 @@
+{
+  "t_total_s": 82.281,
+  "best_val_bpt": 7.058321837046602,
+  "best_val_nll": 4.892455880833546,
+  "best_val_perplexity": 133.28049345878645,
+  "best_epoch": 2,
+  "final_train_bpt": 7.178486475900608,
+  "final_val_bpt": 7.058321837046602,
+  "epochs_run": 3,
+  "config_hash": "fedba932",
+  "run_dir": "runs/meshtron-all/fedba932"
+}

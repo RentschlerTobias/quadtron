@@ -8,19 +8,18 @@
   "n_heads": 8,
   "stage_layers": [
     4,
-    4,
-    4,
-    4,
-    4
+    6,
+    6,
+    2
   ],
-  "n_latents": 16,
-  "dropout": 0.2,
+  "n_latents": 64,
+  "dropout": 0.287937571435675,
   "ffn_mult": 4,
-  "learning_rate": 0.0002,
-  "weight_decay": 0.039,
-  "warmup_steps": 1500,
+  "learning_rate": 0.00020636753459594563,
+  "weight_decay": 0.04769547068788642,
+  "warmup_steps": 200,
   "grad_clip": 1.0,
-  "batch_size": 16,
+  "batch_size": 24,
   "accumulation_steps": 1,
   "num_epochs": 50,
   "early_stopping_patience": 5,
@@ -31,7 +30,7 @@
   "cudnn_deterministic": false,
   "num_workers": 0,
   "pin_memory": true,
-  "log_dir": "runs/meshtron-stage2",
-  "save_best": true,
+  "log_dir": "runs/meshtron-all",
+  "save_best": false,
   "save_last": false
 }

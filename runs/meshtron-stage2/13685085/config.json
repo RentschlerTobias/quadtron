@@ -4,16 +4,16 @@
   "sorting_strategy": 1,
   "quantization": 256,
   "n_sample_points": 1000,
-  "d_model": 512,
-  "n_heads": 8,
+  "d_model": 384,
+  "n_heads": 6,
   "stage_layers": [
+    6,
+    2,
+    6,
     4,
-    4,
-    4,
-    4,
-    4
+    6
   ],
-  "n_latents": 16,
+  "n_latents": 64,
   "dropout": 0.2,
   "ffn_mult": 4,
   "learning_rate": 0.0002,
@@ -32,6 +32,6 @@
   "num_workers": 0,
   "pin_memory": true,
   "log_dir": "runs/meshtron-stage2",
-  "save_best": true,
+  "save_best": false,
   "save_last": false
 }
