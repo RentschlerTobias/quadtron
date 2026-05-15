@@ -1,12 +1,12 @@
 {
-  "t_total_s": 125.649,
-  "best_val_bpt": 4.235201252700832,
-  "best_val_nll": 2.93561780741353,
-  "best_val_perplexity": 18.83313479204729,
-  "best_epoch": 3,
-  "final_train_bpt": 4.930921691908813,
-  "final_val_bpt": 4.235201252700832,
-  "epochs_run": 5,
+  "t_total_s": 696.422,
+  "best_val_bpt": 0.5212278623794713,
+  "best_val_nll": 0.36128762323761765,
+  "best_val_perplexity": 1.4351761915430088,
+  "best_epoch": 24,
+  "final_train_bpt": 0.5270684822668309,
+  "final_val_bpt": 0.5212278623794713,
+  "epochs_run": 25,
   "config_hash": "4c0515d3",
   "run_dir": "runs/meshtron-sorting-fair/4c0515d3"
 }
