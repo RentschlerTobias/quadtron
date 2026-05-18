@@ -13,7 +13,8 @@ class Tokenizer2D:
         Args:
             sorting_strategy: 0 = lexicographical (baseline), 1 = directed row traversal
                               (full 8 tokens/face), 2 = directed row traversal with
-                              row-compressed emission (4 tokens/face mid-row + eor token).
+                              row-compressed emission (4 tokens/face mid-row + eor token),
+                              3 = like 2 but rows enforced left-to-right (all CW).
         """
         self.verbose = verbose
         self.tokens_per_face = 8
@@ -80,9 +81,13 @@ class Tokenizer2D:
             if self.verbose:
                 print("Adjacent rows with row-compressed emission (Strategy 2)")
             return self._order_quads_compressed(vertices, quads)
+        elif self.sorting_strategy == 3:
+            if self.verbose:
+                print("Adjacent rows with row-compressed emission + left-to-right (Strategy 3)")
+            return self._order_quads_compressed_directed(vertices, quads)
         else:
             raise ValueError(f"Unknown sorting_strategy={
-                             self.sorting_strategy}. Must be 0, 1, or 2.")
+                             self.sorting_strategy}. Must be 0, 1, 2, or 3.")
 
     def _order_quads_lexicographical(self, vertices: torch.Tensor, quads: torch.Tensor):
         """standard face sorting."""
@@ -118,16 +123,29 @@ class Tokenizer2D:
             vertices, sorted_quads.T)  # [n, 4], list[tuple]
         return reordered, rows
 
-    def _order_quads_compressed(self, vertices: torch.Tensor, quads: torch.Tensor):
+    def _order_quads_compressed(self, vertices: torch.Tensor, quads: torch.Tensor,
+                                force_direction: Optional[str] = None):
         """Strategy 2 ordering. Uses the strip traversal from order_quads_yx, then
         arranges each face so that v0, v1 = reversed exit of previous face (v3, v2)
         and v2, v3 = edge shared with the NEXT face (lookahead). When neither
         constraint can be satisfied, a new compression row is started (signalled
         via the returned `rows` list).
+
+        Row direction determines vertex ordering:
+        - left-to-right (cw): start BL, clockwise -> BL, TL, TR, BR
+        - right-to-left (ccw): start BR, counter-clockwise -> BR, TR, TL, BL
+
+        Args:
+            force_direction: If set to 'cw' or 'ccw', overrides row direction detection
+                           for the second pass (useful for Strategy 3 which always
+                           enforces left-to-right rows).
         """
         import math
         sorted_quads = order_quads_yx(vertices, quads).T.tolist()  # [n][4] verts
         n = len(sorted_quads)
+
+        def centroid_x(verts):
+            return sum(vertices[v][0].item() for v in verts) / 4
 
         def ccw_ring(verts):
             cx = sum(vertices[v][0].item() for v in verts) / 4
@@ -139,7 +157,23 @@ class Tokenizer2D:
             s = set(a) & set(b)
             return tuple(s) if len(s) == 2 else None
 
-        def arrange_with_exit(face_verts, exit_a, exit_b):
+        def arrange(face_verts, direction):
+            """Arrange face vertices based on row direction.
+            cw: start at BL (min(vx+vy)), clockwise
+            ccw: start at BR (min-y, max-x), counter-clockwise
+            """
+            ring = ccw_ring(face_verts)
+            if direction == 'cw':
+                ring = ring[::-1]
+                start_v = min(face_verts, key=lambda v:
+                    vertices[v][0].item() + vertices[v][1].item())
+            else:
+                start_v = min(face_verts, key=lambda v: (
+                    vertices[v][1].item(), -vertices[v][0].item()))
+            i = ring.index(start_v)
+            return ring[i:] + ring[:i]
+
+        def arrange_with_exit(face_verts, exit_a, exit_b, direction):
             """Arrange so v2=exit_a, v3=exit_b, traversing the face cycle.
             Returns [v0,v1,v2,v3] or None if (exit_a, exit_b) not an edge of face."""
             ring = ccw_ring(face_verts)
@@ -152,31 +186,23 @@ class Tokenizer2D:
             if (ia - ib) % 4 == 1:
                 # CW order
                 return [ring[(ia + 2) % 4], ring[(ia + 1) % 4], ring[ia], ring[ib]]
-            return None  # diagonal — not an edge
+            return None
 
-        def arrange_canonical(face_verts):
-            # CW from min-y, min-x (fallback when no neighbour constraint exists)
-            ring = ccw_ring(face_verts)[::-1]
-            start_v = min(face_verts, key=lambda v: (
-                vertices[v][1].item(), vertices[v][0].item()))
-            i = ring.index(start_v)
-            return ring[i:] + ring[:i]
-
-        def arrange_row_start(face_verts, next_face_verts):
+        def arrange_row_start(face_verts, next_face_verts, direction):
             """Row start: orient so exit edge = edge shared with next face."""
             if next_face_verts is not None:
                 s = shared_edge(face_verts, next_face_verts)
                 if s is not None:
                     a, b = s
-                    arr = arrange_with_exit(face_verts, a, b)
+                    arr = arrange_with_exit(face_verts, a, b, direction)
                     if arr is not None:
                         return arr
-                    arr = arrange_with_exit(face_verts, b, a)
+                    arr = arrange_with_exit(face_verts, b, a, direction)
                     if arr is not None:
                         return arr
-            return arrange_canonical(face_verts)
+            return arrange(face_verts, direction)
 
-        def continuation_arrange(prev_face, cur_face_verts):
+        def continuation_arrange(prev_face, cur_face_verts, direction):
             v0_target = prev_face[3]
             v1_target = prev_face[2]
             if v0_target not in cur_face_verts or v1_target not in cur_face_verts:
@@ -197,14 +223,54 @@ class Tokenizer2D:
             next_face = sorted_quads[idx + 1] if idx + 1 < n else None
             arranged = None
             if idx > row_start:
-                arranged = continuation_arrange(result[-1], face_verts)
+                direction = 'cw' if centroid_x(result[-1]) < centroid_x(face_verts) else 'ccw'
+                arranged = continuation_arrange(result[-1], face_verts, direction)
                 if arranged is None:
                     rows.append((row_start, idx))
                     row_start = idx
             if arranged is None:
-                arranged = arrange_row_start(face_verts, next_face)
+                if row_start < len(rows):
+                    s, e = rows[-1] if rows else (0, 0)
+                    prev_row_end = rows[-1][1] if rows else 0
+                    if row_start > 0 and row_start == prev_row_end:
+                        direction = 'cw' if centroid_x(result[row_start - 1]) < centroid_x(face_verts) else 'ccw'
+                    else:
+                        direction = 'cw'
+                else:
+                    direction = 'cw'
+                arranged = arrange_row_start(face_verts, next_face, direction)
             result.append(arranged)
         rows.append((row_start, n))
+
+        for i in range(len(rows)):
+            s, e = rows[i]
+            if force_direction is not None:
+                direction = force_direction
+            elif e - s >= 2:
+                direction = 'cw' if centroid_x(sorted_quads[s]) < centroid_x(sorted_quads[e - 1]) else 'ccw'
+            else:
+                direction = 'cw'
+            for j in range(s, e):
+                result[j] = arrange(result[j], direction)
+
+        return torch.tensor(result, dtype=torch.long), rows
+
+    def _order_quads_compressed_directed(self, vertices: torch.Tensor, quads: torch.Tensor):
+        ordered_faces, rows = self._order_quads_compressed(vertices, quads, force_direction='cw')
+        faces_list = ordered_faces.tolist()
+
+        def check_and_reverse_row(s, e):
+            if e - s <= 1:
+                return faces_list[s:e]
+            first_verts = faces_list[s]
+            last_verts = faces_list[e - 1]
+            if vertices[first_verts[0]][0].item() > vertices[last_verts[0]][0].item():
+                return faces_list[s:e][::-1]
+            return faces_list[s:e]
+
+        result = []
+        for s, e in rows:
+            result.extend(check_and_reverse_row(s, e))
 
         return torch.tensor(result, dtype=torch.long), rows
 

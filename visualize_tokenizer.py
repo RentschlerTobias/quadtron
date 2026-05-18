@@ -27,7 +27,8 @@ def viz(mesh_path, mesh_idx=0, n_faces=None, alpha=0.30, strategy=2, out='viz.pn
     mesh = torch.load(mesh_path, weights_only=False)[mesh_idx]
     verts = mesh.x[:, :2]
     tok = Tokenizer2D(quantization_levels=256, sorting_strategy=strategy)
-    ordered, rows = tok._order_quads(verts, mesh.faces)  # [n_total, 4], list[(s,e)] or None
+    # [n_total, 4], list[(s,e)] or None
+    ordered, rows = tok._order_quads(verts, mesh.faces)
 
     n_total = ordered.shape[0]
     n = n_total if n_faces is None else min(n_faces, n_total)
@@ -92,7 +93,8 @@ def viz(mesh_path, mesh_idx=0, n_faces=None, alpha=0.30, strategy=2, out='viz.pn
     # Tint each compression row with a light background colour to highlight
     # the row structure in the mesh plot (strategy 2 only).
     if strategy == 2:
-        ROW_TINTS = ['#fde0dc', '#dce8fc', '#dcfce0', '#fcf3dc', '#f0dcfc', '#dcfcf3']
+        ROW_TINTS = ['#fde0dc', '#dce8fc', '#dcfce0',
+                     '#fcf3dc', '#f0dcfc', '#dcfcf3']
         for ri, (s, e) in enumerate(rows_shown):
             row_verts = []
             for fi in range(s, e):
@@ -100,7 +102,8 @@ def viz(mesh_path, mesh_idx=0, n_faces=None, alpha=0.30, strategy=2, out='viz.pn
             if not row_verts:
                 continue
             arr = np.array(row_verts)
-            xmin, ymin = arr.min(0); xmax, ymax = arr.max(0)
+            xmin, ymin = arr.min(0)
+            xmax, ymax = arr.max(0)
             pad = 0.005
             ax.add_patch(plt.Rectangle((xmin - pad, ymin - pad),
                                        xmax - xmin + 2 * pad,
@@ -141,7 +144,8 @@ def viz(mesh_path, mesh_idx=0, n_faces=None, alpha=0.30, strategy=2, out='viz.pn
             Line2D([0], [0], marker='s', color='w', markerfacecolor='#bbb',
                    markeredgecolor='black', markersize=7,
                    label='Implicit (not emitted)'))
-    ax.legend(handles=legend_items, loc='upper right', fontsize=8, framealpha=0.9)
+    ax.legend(handles=legend_items, loc='upper right',
+              fontsize=8, framealpha=0.9)
     ax.set_title(
         f'{mesh_path}  [mesh {mesh_idx}]  –  Strategy {strategy}'
         f'   ({n}/{n_total} faces, {len(rows_shown)} compression rows, α={alpha})',
@@ -194,7 +198,8 @@ def viz(mesh_path, mesh_idx=0, n_faces=None, alpha=0.30, strategy=2, out='viz.pn
                               ms=5, mec='black', mew=0.4)
                 if is_imp:
                     # subtle marker showing it would be filled by previous exit edge
-                    ax_s.plot(xn, row_y + 0.25, 'x', color='#aaa', ms=4, mew=1.0)
+                    ax_s.plot(xn, row_y + 0.25, 'x',
+                              color='#aaa', ms=4, mew=1.0)
 
         # EOR badge after the row's last face
         if strategy == 2:
@@ -231,5 +236,6 @@ if __name__ == '__main__':
         indices = [int(midx_arg)]
 
     for i in indices:
-        out = f'viz_s{strat}_{i}.png' if len(indices) > 1 else f'viz_s{strat}.png'
+        out = f'viz_s{strat}_{i}.png' if len(
+            indices) > 1 else f'viz_s{strat}.png'
         viz(path, i, nf, alpha, strategy=strat, out=out)
