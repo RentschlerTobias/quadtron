@@ -50,6 +50,26 @@ def convert_optuna_params_to_config(params: dict) -> dict:
     return params
 
 
+def is_stage_complete(study_name: str, storage_path: Path, n_trials: int) -> tuple[bool, dict | None]:
+    """Check if a study has completed all desired trials.
+
+    Returns:
+        (is_complete, best_params) - if complete, best_params contains the best trial params
+    """
+    db_path = storage_path / f"sweep_{study_name.split('-')[1]}_{study_name.split('-')[-1]}.db"
+    try:
+        study = optuna.load_study(
+            study_name=study_name,
+            storage=f"sqlite:///{db_path}"
+        )
+        completed = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
+        if completed >= n_trials and study.best_trial:
+            return True, study.best_params
+    except Exception as e:
+        print(f"  Warning: Could not load study {study_name}: {e}")
+    return False, None
+
+
 SORTING_METHODS = [0, 1, 3]
 STAGES = ["a", "b", "c"]
 
@@ -368,24 +388,44 @@ def main():
 
             study_name = f"meshtron-s{sorting_strategy}-stage-{stage}"
 
-            summary = run_stage_optimization(
-                sorting_strategy=sorting_strategy,
-                stage=stage,
-                base_config=base_config if stage == "a" else best_configs[sorting_strategy],
-                storage_path=sandbox,
-                study_name=study_name,
-                n_trials=cfg["trials"],
-                n_epochs=cfg["epochs"],
-                patience=cfg["patience"],
-                parallel=args.parallel_trials,
+            is_complete, existing_best_params = is_stage_complete(
+                study_name, sandbox, cfg["trials"]
             )
+
+            if is_complete and existing_best_params:
+                print(f"\n  Stage {stage.upper()} already complete, skipping...")
+                best_params = existing_best_params
+                summary = {
+                    "study_name": study_name,
+                    "sorting_strategy": sorting_strategy,
+                    "stage": stage,
+                    "n_trials_total": cfg["trials"],
+                    "n_trials_completed": cfg["trials"],
+                    "best_value": None,
+                    "best_params": best_params,
+                    "best_trial_number": None,
+                    "elapsed_seconds": 0,
+                    "skipped": True,
+                }
+            else:
+                summary = run_stage_optimization(
+                    sorting_strategy=sorting_strategy,
+                    stage=stage,
+                    base_config=base_config if stage == "a" else best_configs[sorting_strategy],
+                    storage_path=sandbox,
+                    study_name=study_name,
+                    n_trials=cfg["trials"],
+                    n_epochs=cfg["epochs"],
+                    patience=cfg["patience"],
+                    parallel=args.parallel_trials,
+                )
+                best_params = summary["best_params"]
 
             all_summaries.append(summary)
             stage_results[stage] = summary
 
-            best_params = summary["best_params"]
             if best_params:
-                converted_params = convert_optuna_params_to_config(best_params)
+                converted_params = convert_optuna_params_to_config(dict(best_params))
                 if stage == "a":
                     best_configs[sorting_strategy] = TrainingConfig.from_dict({
                         **base_config.to_dict(),
@@ -399,7 +439,8 @@ def main():
                         **converted_params,
                     })
 
-            print(f"  Stage {stage.upper()} best value: {summary['best_value']}")
+            val_bpt = summary.get("best_value") or "N/A"
+            print(f"  Stage {stage.upper()} best value: {val_bpt}")
 
         (sandbox / "best_configs" / f"s{sorting_strategy}_best.json").write_text(
             json.dumps(best_configs[sorting_strategy].to_dict(), indent=2, default=str)
