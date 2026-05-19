@@ -31,9 +31,9 @@ def parse_args() -> argparse.Namespace:
                    default=Path("best_config.json"))
     p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2],
                    help="Seeds to sweep (default: 0 1 2).")
-    p.add_argument("--strategies", type=int, nargs="+", default=[0, 1, 3],
-                   choices=[0, 1, 3],
-                   help="Strategies to compare (default: 0 1 3).")
+    p.add_argument("--strategies", type=int, nargs="+", default=[0, 1, 2, 3],
+                   choices=[0, 1, 2, 3],
+                   help="Strategies to compare (default: 0 1 2 3).")
     p.add_argument("--log-dir", type=str,
                    default="runs/meshtron-strategy-compare",
                    help="Parent dir for run directories.")
@@ -82,7 +82,8 @@ def run_one(base: TrainingConfig, seed: int, strategy: int,
     elapsed = time.perf_counter() - t0
 
     val_tokens = int(trainer.last_val.n_tokens) if trainer.last_val else 0
-    train_tokens = int(trainer.last_train.n_tokens) if trainer.last_train else 0
+    train_tokens = int(
+        trainer.last_train.n_tokens) if trainer.last_train else 0
     bits_per_mesh = (
         result.best_val_bpt * val_tokens / n_val if n_val > 0 else float("nan")
     )
@@ -162,7 +163,8 @@ def plot_comparison(agg: dict, output_path: Path) -> None:
         return
 
     strategies = sorted(agg.keys())
-    metrics = ["best_val_bpt", "bits_per_mesh", "peak_gpu_mem_mib", "wall_time_s"]
+    metrics = ["best_val_bpt", "bits_per_mesh",
+               "peak_gpu_mem_mib", "wall_time_s"]
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     axes = axes.flatten()
@@ -183,7 +185,8 @@ def plot_comparison(agg: dict, output_path: Path) -> None:
             ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(stds)*0.05,
                     f"{mean:.4f}", ha="center", va="bottom", fontsize=9)
 
-    plt.suptitle("Strategy Comparison: S0 (Lexicographic) vs S1 (Directed) vs S3 (Compressed+CW)")
+    plt.suptitle(
+        "Strategy Comparison: S0 (Lexicographic) vs S1 (Directed) vs S3 (Compressed+CW)")
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     print(f"Saved plot to {output_path}")

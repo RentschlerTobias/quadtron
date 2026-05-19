@@ -1,0 +1,12 @@
+{
+  "t_total_s": 256.983,
+  "best_val_bpt": 0.4525169091762234,
+  "best_val_nll": 0.3136608197512001,
+  "best_val_perplexity": 1.3684255149178082,
+  "best_epoch": 29,
+  "final_train_bpt": 0.4186884693268355,
+  "final_val_bpt": 0.4525169091762234,
+  "epochs_run": 30,
+  "config_hash": "745bf795",
+  "run_dir": "runs/compare_run_mars/745bf795"
+}
