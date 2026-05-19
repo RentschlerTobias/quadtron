@@ -28,6 +28,28 @@ from config import TrainingConfig
 from metrics import EpochMetrics
 from trainer import Trainer
 
+
+def convert_optuna_params_to_config(params: dict) -> dict:
+    """Convert Optuna's stage_a params (n_stages, layer_{i}) to TrainingConfig stage_layers.
+
+    Optuna returns n_stages and layer_0, layer_1, ... as separate parameters.
+    TrainingConfig uses a single stage_layers tuple where len(tuple) = n_stages.
+    This function converts from the Optuna format to the TrainingConfig format.
+    """
+    if "n_stages" not in params:
+        return params
+
+    n_stages = params.pop("n_stages")
+    layers = []
+    for i in range(n_stages):
+        key = f"layer_{i}"
+        if key in params:
+            layers.append(int(params.pop(key)))
+
+    params["stage_layers"] = tuple(layers)
+    return params
+
+
 SORTING_METHODS = [0, 1, 3]
 STAGES = ["a", "b", "c"]
 
@@ -363,17 +385,18 @@ def main():
 
             best_params = summary["best_params"]
             if best_params:
+                converted_params = convert_optuna_params_to_config(best_params)
                 if stage == "a":
                     best_configs[sorting_strategy] = TrainingConfig.from_dict({
                         **base_config.to_dict(),
-                        **best_params,
+                        **converted_params,
                         "sorting_strategy": sorting_strategy,
                     })
                 else:
                     current = best_configs[sorting_strategy]
                     best_configs[sorting_strategy] = TrainingConfig.from_dict({
                         **current.to_dict(),
-                        **best_params,
+                        **converted_params,
                     })
 
             print(f"  Stage {stage.upper()} best value: {summary['best_value']}")

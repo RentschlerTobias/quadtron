@@ -29,6 +29,11 @@ Optimizes: `d_model, n_heads, n_stages, stage_layers, n_latents`
 | stage_layers | [2, 4, 6] per stage | [8,8,8] |
 | n_latents | [4, 8, 16, 32, 64] | 64 |
 
+**Note on n_stages:** Optuna internally optimizes `n_stages` and `layer_{i}` to determine the architecture.
+However, `TrainingConfig` does not have an `n_stages` parameter - the number of stages is implicitly
+determined by `len(stage_layers)`. When merging Optuna's `best_params` into a `TrainingConfig`,
+`n_stages` and individual `layer_{i}` parameters are converted to a single `stage_layers` tuple.
+
 **Trials:** 30
 **Epochs per trial:** 15
 **Early stopping patience:** 5
