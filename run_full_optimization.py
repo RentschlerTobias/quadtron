@@ -70,6 +70,51 @@ def is_stage_complete(study_name: str, storage_path: Path, n_trials: int) -> tup
     return False, None
 
 
+def load_best_config_from_dbs(sorting_strategy: int, storage_path: Path) -> TrainingConfig | None:
+    """Reconstruct best TrainingConfig from all three stage databases.
+
+    This is useful when a run crashed and we need to recover the best config
+    from the existing Optuna databases.
+
+    Returns:
+        TrainingConfig with params from all completed stages, or None if any stage is missing.
+    """
+    base = TrainingConfig()
+    best_params_per_stage = {}
+
+    for stage in STAGES:
+        study_name = f"meshtron-s{sorting_strategy}-stage-{stage}"
+        db_path = storage_path / f"sweep_s{sorting_strategy}_{stage}.db"
+        try:
+            study = optuna.load_study(
+                study_name=study_name,
+                storage=f"sqlite:///{db_path}"
+            )
+            if study.best_trial:
+                best_params_per_stage[stage] = dict(study.best_params)
+            else:
+                return None
+        except Exception:
+            return None
+
+    if len(best_params_per_stage) != 3:
+        return None
+
+    stage_a_params = convert_optuna_params_to_config(dict(best_params_per_stage["a"]))
+    stage_b_params = dict(best_params_per_stage["b"])
+    stage_c_params = dict(best_params_per_stage["c"])
+
+    config_dict = {
+        **base.to_dict(),
+        **stage_a_params,
+        **stage_b_params,
+        **stage_c_params,
+        "sorting_strategy": sorting_strategy,
+    }
+
+    return TrainingConfig.from_dict(config_dict)
+
+
 SORTING_METHODS = [0, 1, 3]
 STAGES = ["a", "b", "c"]
 
@@ -362,10 +407,16 @@ def main():
                         help="Number of parallel trials")
     parser.add_argument("--n-seeds", type=int, default=3,
                         help="Number of seeds for final comparison")
+    parser.add_argument("--resume-from", type=str, default=None,
+                        help="Resume from specific sorting:stage, e.g. '0:c' or '1:b'")
+    parser.add_argument("--recover-config", type=str, default=None,
+                        help="Recover best config from DB for a sorting method, e.g. '0' or '1'")
     args = parser.parse_args()
 
     sandbox = get_sandbox_dir()
     sandbox.mkdir(parents=True, exist_ok=True)
+    (sandbox / "best_configs").mkdir(parents=True, exist_ok=True)
+    (sandbox / "reports").mkdir(parents=True, exist_ok=True)
 
     print(f"Sandbox: {sandbox}")
     print(f"Sorting methods: {args.sorting_methods}")
@@ -376,7 +427,44 @@ def main():
 
     all_summaries = []
 
+    if args.recover_config is not None:
+        sorting = int(args.recover_config)
+        print(f"\nRecovering best config from DBs for sorting {sorting}...")
+        recovered = load_best_config_from_dbs(sorting, sandbox)
+        if recovered:
+            out_path = sandbox / "best_configs" / f"s{sorting}_best.json"
+            out_path.write_text(json.dumps(recovered.to_dict(), indent=2, default=str))
+            print(f"Recovered config saved to: {out_path}")
+            print(f"Config: {recovered}")
+        else:
+            print("Failed to recover config - missing or incomplete stages in DB")
+        return
+
+    resume_sorting = None
+    resume_stage = None
+    if args.resume_from:
+        parts = args.resume_from.split(":")
+        if len(parts) == 2:
+            resume_sorting = int(parts[0])
+            resume_stage = parts[1]
+            print(f"\nResuming from sorting {resume_sorting}, stage {resume_stage}")
+
     for sorting_strategy in args.sorting_methods:
+        if resume_sorting is not None and sorting_strategy < resume_sorting:
+            print(f"\n\n{'#'*60}")
+            print(f"# SKIPPING SORTING STRATEGY {sorting_strategy} (before resume point)")
+            print(f"{'#'*60}")
+            continue
+
+        if resume_sorting is not None and sorting_strategy == resume_sorting:
+            recovered = load_best_config_from_dbs(sorting_strategy, sandbox)
+            if recovered:
+                print(f"\n  Recovered config from DB for sorting {sorting_strategy}")
+                best_configs[sorting_strategy] = recovered
+            else:
+                print(f"\n  Warning: Could not recover full config from DB for sorting {sorting_strategy}")
+                print(f"  Will try to load stage-by-stage from DB...")
+
         print(f"\n\n{'#'*60}")
         print(f"# OPTIMIZING SORTING STRATEGY {sorting_strategy}")
         print(f"{'#'*60}")
@@ -384,6 +472,12 @@ def main():
         stage_results = {}
 
         for stage in STAGES:
+            if resume_stage is not None and sorting_strategy == resume_sorting:
+                stage_order = {"a": 0, "b": 1, "c": 2}
+                if stage_order.get(stage, 0) < stage_order.get(resume_stage, 0):
+                    print(f"  Stage {stage.upper()} before resume point, skipping...")
+                    continue
+
             cfg = STAGE_CONFIG[stage]
 
             study_name = f"meshtron-s{sorting_strategy}-stage-{stage}"
