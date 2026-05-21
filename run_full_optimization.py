@@ -56,13 +56,15 @@ def is_stage_complete(study_name: str, storage_path: Path, n_trials: int) -> tup
     Returns:
         (is_complete, best_params) - if complete, best_params contains the best trial params
     """
-    db_path = storage_path / f"sweep_{study_name.split('-')[1]}_{study_name.split('-')[-1]}.db"
+    db_path = storage_path / \
+        f"sweep_{study_name.split('-')[1]}_{study_name.split('-')[-1]}.db"
     try:
         study = optuna.load_study(
             study_name=study_name,
             storage=f"sqlite:///{db_path}"
         )
-        completed = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
+        completed = len([t for t in study.trials if t.state ==
+                        optuna.trial.TrialState.COMPLETE])
         if completed >= n_trials and study.best_trial:
             return True, study.best_params
     except Exception as e:
@@ -100,7 +102,8 @@ def load_best_config_from_dbs(sorting_strategy: int, storage_path: Path) -> Trai
     if len(best_params_per_stage) != 3:
         return None
 
-    stage_a_params = convert_optuna_params_to_config(dict(best_params_per_stage["a"]))
+    stage_a_params = convert_optuna_params_to_config(
+        dict(best_params_per_stage["a"]))
     stage_b_params = dict(best_params_per_stage["b"])
     stage_c_params = dict(best_params_per_stage["c"])
 
@@ -120,13 +123,13 @@ STAGES = ["a", "b", "c"]
 
 STAGE_CONFIG = {
     "a": {
-        "trials": 30,
+        "trials": 25,
         "epochs": 15,
         "patience": 5,
         "description": "Architecture",
     },
     "b": {
-        "trials": 30,
+        "trials": 25,
         "epochs": 15,
         "patience": 5,
         "description": "Hyperparameters",
@@ -151,7 +154,8 @@ def _make_on_epoch(trial: optuna.Trial):
 
 
 def _run_trial(trial: optuna.Trial, cfg: TrainingConfig, log_dir: Path) -> float:
-    cfg_dict = {**cfg.to_dict(), "log_dir": str(log_dir), "save_best": False, "save_last": False}
+    cfg_dict = {**cfg.to_dict(), "log_dir": str(log_dir),
+                "save_best": False, "save_last": False}
     trial_cfg = TrainingConfig.from_dict(cfg_dict)
     trainer = Trainer(trial_cfg)
     trial.set_user_attr("config_hash", trial_cfg.hash())
@@ -163,10 +167,11 @@ def _run_trial(trial: optuna.Trial, cfg: TrainingConfig, log_dir: Path) -> float
 
 
 def stage_a_objective(trial: optuna.Trial, base: TrainingConfig, log_dir: Path) -> float:
-    d_model = trial.suggest_categorical("d_model", [256, 384, 512, 768])
+    d_model = trial.suggest_categorical("d_model", [128, 256, 384, 512])
     n_heads = max(1, d_model // 64)
-    n_stages = trial.suggest_int("n_stages", 2, 5)
-    layers = [trial.suggest_categorical(f"layer_{i}", [2, 4, 6]) for i in range(n_stages)]
+    n_stages = trial.suggest_int("n_stages", 3, 5)
+    layers = [trial.suggest_categorical(
+        f"layer_{i}", [2, 4, 6]) for i in range(n_stages)]
     n_latents = trial.suggest_categorical("n_latents", [4, 8, 16, 32, 64])
 
     overrides = dict(
@@ -181,7 +186,8 @@ def stage_a_objective(trial: optuna.Trial, base: TrainingConfig, log_dir: Path) 
 
 def stage_b_objective(trial: optuna.Trial, base: TrainingConfig, log_dir: Path) -> float:
     overrides = dict(
-        learning_rate=trial.suggest_float("learning_rate", 1e-5, 5e-4, log=True),
+        learning_rate=trial.suggest_float(
+            "learning_rate", 1e-5, 1e-3, log=True),
         warmup_steps=trial.suggest_int("warmup_steps", 0, 2000, step=100),
         dropout=trial.suggest_float("dropout", 0.0, 0.3),
         weight_decay=trial.suggest_float("weight_decay", 0.0, 0.1),
@@ -192,9 +198,12 @@ def stage_b_objective(trial: optuna.Trial, base: TrainingConfig, log_dir: Path) 
 
 def stage_c_objective(trial: optuna.Trial, base: TrainingConfig, log_dir: Path) -> float:
     overrides = dict(
-        batch_size=trial.suggest_categorical("batch_size", [8, 16, 24, 32, 48]),
-        accumulation_steps=trial.suggest_categorical("accumulation_steps", [1, 2, 4]),
-        learning_rate=trial.suggest_float("learning_rate", 1e-5, 5e-4, log=True),
+        batch_size=trial.suggest_categorical(
+            "batch_size", [8, 16, 24]),
+        accumulation_steps=trial.suggest_categorical(
+            "accumulation_steps", [1, 2, 4]),
+        learning_rate=trial.suggest_float(
+            "learning_rate", 1e-5, 5e-4, log=True),
     )
     cfg = TrainingConfig.from_dict({**base.to_dict(), **overrides})
     return _run_trial(trial, cfg, log_dir)
@@ -236,7 +245,8 @@ def run_stage_optimization(
 
     study = optuna.create_study(
         study_name=study_name,
-        storage=f"sqlite:///{storage_path / f'sweep_s{sorting_strategy}_{stage}.db'}",
+        storage=f"sqlite:///{storage_path /
+                             f'sweep_s{sorting_strategy}_{stage}.db'}",
         direction="minimize",
         sampler=sampler,
         pruner=pruner,
@@ -247,10 +257,11 @@ def run_stage_optimization(
         json.dumps(base.to_dict(), indent=2, default=str)
     )
 
-    objective_fn = lambda t: STAGE_OBJECTIVES[stage](t, base, log_dir)
+    def objective_fn(t): return STAGE_OBJECTIVES[stage](t, base, log_dir)
 
     print(f"\n{'='*60}")
-    print(f"Stage {stage.upper()} | Sorting {sorting_strategy} | {n_trials} trials")
+    print(f"Stage {stage.upper()} | Sorting {
+          sorting_strategy} | {n_trials} trials")
     print(f"Study: {study_name}")
     print(f"{'='*60}\n")
 
@@ -291,7 +302,8 @@ def train_with_seeds(
 ) -> list[dict]:
     results = []
     for seed in seeds:
-        cfg_dict = {**config.to_dict(), "seed": seed, "save_best": True, "save_last": True}
+        cfg_dict = {**config.to_dict(), "seed": seed,
+                    "save_best": True, "save_last": True}
         cfg = TrainingConfig.from_dict(cfg_dict)
 
         run_dir = output_dir / f"seed_{seed}"
@@ -383,7 +395,8 @@ def generate_reports(storage_path: Path, summaries: list[dict], final_comparison
     print("="*60)
     for sorting_strategy, data in final_comparison["results"].items():
         print(f"\nStrategy {sorting_strategy}:")
-        print(f"  Mean val_bpt: {data['mean_val_bpt']:.4f} ± {data['std_val_bpt']:.4f}")
+        print(f"  Mean val_bpt: {data['mean_val_bpt']:.4f} ± {
+              data['std_val_bpt']:.4f}")
         print(f"  Mean perplexity: {data['mean_val_perplexity']:.4f}")
 
     return report
@@ -400,7 +413,8 @@ def get_sandbox_dir() -> Path:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Full optimization pipeline for Meshtron")
+    parser = argparse.ArgumentParser(
+        description="Full optimization pipeline for Meshtron")
     parser.add_argument("--sorting-methods", type=int, nargs="+", default=SORTING_METHODS,
                         help="Sorting methods to optimize")
     parser.add_argument("--parallel-trials", type=int, default=2,
@@ -433,7 +447,8 @@ def main():
         recovered = load_best_config_from_dbs(sorting, sandbox)
         if recovered:
             out_path = sandbox / "best_configs" / f"s{sorting}_best.json"
-            out_path.write_text(json.dumps(recovered.to_dict(), indent=2, default=str))
+            out_path.write_text(json.dumps(
+                recovered.to_dict(), indent=2, default=str))
             print(f"Recovered config saved to: {out_path}")
             print(f"Config: {recovered}")
         else:
@@ -447,22 +462,26 @@ def main():
         if len(parts) == 2:
             resume_sorting = int(parts[0])
             resume_stage = parts[1]
-            print(f"\nResuming from sorting {resume_sorting}, stage {resume_stage}")
+            print(f"\nResuming from sorting {
+                  resume_sorting}, stage {resume_stage}")
 
     for sorting_strategy in args.sorting_methods:
         if resume_sorting is not None and sorting_strategy < resume_sorting:
             print(f"\n\n{'#'*60}")
-            print(f"# SKIPPING SORTING STRATEGY {sorting_strategy} (before resume point)")
+            print(f"# SKIPPING SORTING STRATEGY {
+                  sorting_strategy} (before resume point)")
             print(f"{'#'*60}")
             continue
 
         if resume_sorting is not None and sorting_strategy == resume_sorting:
             recovered = load_best_config_from_dbs(sorting_strategy, sandbox)
             if recovered:
-                print(f"\n  Recovered config from DB for sorting {sorting_strategy}")
+                print(f"\n  Recovered config from DB for sorting {
+                      sorting_strategy}")
                 best_configs[sorting_strategy] = recovered
             else:
-                print(f"\n  Warning: Could not recover full config from DB for sorting {sorting_strategy}")
+                print(f"\n  Warning: Could not recover full config from DB for sorting {
+                      sorting_strategy}")
                 print(f"  Will try to load stage-by-stage from DB...")
 
         print(f"\n\n{'#'*60}")
@@ -475,7 +494,8 @@ def main():
             if resume_stage is not None and sorting_strategy == resume_sorting:
                 stage_order = {"a": 0, "b": 1, "c": 2}
                 if stage_order.get(stage, 0) < stage_order.get(resume_stage, 0):
-                    print(f"  Stage {stage.upper()} before resume point, skipping...")
+                    print(f"  Stage {stage.upper()
+                                     } before resume point, skipping...")
                     continue
 
             cfg = STAGE_CONFIG[stage]
@@ -487,7 +507,8 @@ def main():
             )
 
             if is_complete and existing_best_params:
-                print(f"\n  Stage {stage.upper()} already complete, skipping...")
+                print(f"\n  Stage {stage.upper()
+                                   } already complete, skipping...")
                 best_params = existing_best_params
                 summary = {
                     "study_name": study_name,
@@ -519,7 +540,8 @@ def main():
             stage_results[stage] = summary
 
             if best_params:
-                converted_params = convert_optuna_params_to_config(dict(best_params))
+                converted_params = convert_optuna_params_to_config(
+                    dict(best_params))
                 if stage == "a":
                     best_configs[sorting_strategy] = TrainingConfig.from_dict({
                         **base_config.to_dict(),
@@ -537,7 +559,8 @@ def main():
             print(f"  Stage {stage.upper()} best value: {val_bpt}")
 
         (sandbox / "best_configs" / f"s{sorting_strategy}_best.json").write_text(
-            json.dumps(best_configs[sorting_strategy].to_dict(), indent=2, default=str)
+            json.dumps(
+                best_configs[sorting_strategy].to_dict(), indent=2, default=str)
         )
 
     print(f"\n\n{'='*60}")

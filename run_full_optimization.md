@@ -59,7 +59,7 @@ Optimizes: `batch_size, accumulation_steps, learning_rate`
 
 | Parameter | Search Space |
 |-----------|--------------|
-| batch_size | [8, 16, 24, 32, 48] |
+| batch_size | [8, 16, 24] |
 | accumulation_steps | [1, 2, 4] |
 | learning_rate | [1e-5, 5e-4] (log scale) |
 
