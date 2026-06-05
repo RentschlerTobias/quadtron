@@ -1,0 +1,61 @@
+<!DOCTYPE html><html><head>
+<meta charset='utf-8'>
+<title>sweep.db Optuna Analysis</title>
+<style>
+body{font-family:sans-serif;margin:20px;background:#fafafa}
+h1{color:#222;border-bottom:2px solid #333;padding-bottom:8px}
+h2{color:#444;margin-top:40px}
+h3{color:#666;margin-top:20px}
+table{border-collapse:collapse;margin:15px 0;width:100%;max-width:900px}
+th,td{border:1px solid #bbb;padding:8px 12px;text-align:left}
+th{background:#222;color:#fff}
+tr:nth-child(even){background:#f2f2f2}
+img{max-width:100%;height:auto;margin:8px 0;border:1px solid #ddd;background:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(500px,1fr));gap:20px;margin:15px 0}
+.card{background:#fff;padding:15px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+.card h3{margin-top:0}
+a{color:#1565C0}
+</style></head><body>
+<h1>sweep.db — Optuna Study Analysis</h1>
+<p>4 studies: Stage2, Stage3, Sorting Comparison, All-in-one</p>
+<h2>Best Value Comparison</h2>
+<img src='best_value_comparison.png'>
+<h2>Convergence Comparison</h2>
+<img src='convergence_all.png'>
+<h2>Stage 2 — Architecture Search</h2>
+<p>Architecture search: d_model, stage_layers — 12 trials</p>
+<div class='grid'>
+<div class='card'><h3>Opt History</h3><img src='opt_history_meshtron-stage2.png'><p><a href='opt_history_meshtron-stage2.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Param Importance Fanova</h3><img src='param_importance_fanova_meshtron-stage2.png'><p><a href='param_importance_fanova_meshtron-stage2.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Param Importance Rank</h3><img src='param_importance_rank_meshtron-stage2.png'><p><a href='param_importance_rank_meshtron-stage2.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Slice</h3><img src='slice_meshtron-stage2.png'><p><a href='slice_meshtron-stage2.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Parallel</h3><img src='parallel_meshtron-stage2.png'><p><a href='parallel_meshtron-stage2.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Contour</h3><img src='contour_meshtron-stage2.png'><p><a href='contour_meshtron-stage2.html' target='_blank'>Interactive ↗</a></p></div>
+</div>
+<h2>Stage 3 — Hyperparameter Tuning</h2>
+<p>Hyperparameter tuning (lr, warmup, dropout, etc.) — 2 trials</p>
+<div class='grid'>
+<div class='card'><h3>Opt History</h3><img src='opt_history_meshtron-stage3.png'><p><a href='opt_history_meshtron-stage3.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Param Importance Fanova</h3><img src='param_importance_fanova_meshtron-stage3.png'><p><a href='param_importance_fanova_meshtron-stage3.html' target='_blank'>Interactive ↗</a></p></div>
+</div>
+<h2>Sorting Strategy Comparison</h2>
+<p>Comparing sorting strategies 1 vs 2 — 67 trials</p>
+<div class='grid'>
+<div class='card'><h3>Opt History</h3><img src='opt_history_meshtron-sorting.png'><p><a href='opt_history_meshtron-sorting.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Param Importance Fanova</h3><img src='param_importance_fanova_meshtron-sorting.png'><p><a href='param_importance_fanova_meshtron-sorting.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Param Importance Rank</h3><img src='param_importance_rank_meshtron-sorting.png'><p><a href='param_importance_rank_meshtron-sorting.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Slice</h3><img src='slice_meshtron-sorting.png'><p><a href='slice_meshtron-sorting.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Parallel</h3><img src='parallel_meshtron-sorting.png'><p><a href='parallel_meshtron-sorting.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Contour</h3><img src='contour_meshtron-sorting.png'><p><a href='contour_meshtron-sorting.html' target='_blank'>Interactive ↗</a></p></div>
+</div>
+<h2>All Parameters Combined</h2>
+<p>Full joint optimization across all parameter spaces — 26 trials</p>
+<div class='grid'>
+<div class='card'><h3>Opt History</h3><img src='opt_history_meshtron-all.png'><p><a href='opt_history_meshtron-all.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Param Importance Fanova</h3><img src='param_importance_fanova_meshtron-all.png'><p><a href='param_importance_fanova_meshtron-all.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Param Importance Rank</h3><img src='param_importance_rank_meshtron-all.png'><p><a href='param_importance_rank_meshtron-all.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Slice</h3><img src='slice_meshtron-all.png'><p><a href='slice_meshtron-all.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Parallel</h3><img src='parallel_meshtron-all.png'><p><a href='parallel_meshtron-all.html' target='_blank'>Interactive ↗</a></p></div>
+<div class='card'><h3>Contour</h3><img src='contour_meshtron-all.png'><p><a href='contour_meshtron-all.html' target='_blank'>Interactive ↗</a></p></div>
+</div>
+</body></html>

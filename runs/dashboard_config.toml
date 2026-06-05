@@ -1,0 +1,35 @@
+[[studies]]
+name = "meshtron-s0-stage-a"
+storage = "sqlite:///sweep_s0_a.db"
+
+[[studies]]
+name = "meshtron-s0-stage-b"
+storage = "sqlite:///sweep_s0_b.db"
+
+[[studies]]
+name = "meshtron-s0-stage-c"
+storage = "sqlite:///sweep_s0_c.db"
+
+[[studies]]
+name = "meshtron-s1-stage-a"
+storage = "sqlite:///sweep_s1_a.db"
+
+[[studies]]
+name = "meshtron-s1-stage-b"
+storage = "sqlite:///sweep_s1_b.db"
+
+[[studies]]
+name = "meshtron-s1-stage-c"
+storage = "sqlite:///sweep_s1_c.db"
+
+[[studies]]
+name = "meshtron-s3-stage-a"
+storage = "sqlite:///sweep_s3_a.db"
+
+[[studies]]
+name = "meshtron-s3-stage-b"
+storage = "sqlite:///sweep_s3_b.db"
+
+[[studies]]
+name = "meshtron-s3-stage-c"
+storage = "sqlite:///sweep_s3_c.db"

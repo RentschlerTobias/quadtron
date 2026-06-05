@@ -1,0 +1,13 @@
+{
+  "studies": [
+    {"name": "meshtron-s0-stage-a", "storage": "sqlite:///sweep_s0_a.db"},
+    {"name": "meshtron-s0-stage-b", "storage": "sqlite:///sweep_s0_b.db"},
+    {"name": "meshtron-s0-stage-c", "storage": "sqlite:///sweep_s0_c.db"},
+    {"name": "meshtron-s1-stage-a", "storage": "sqlite:///sweep_s1_a.db"},
+    {"name": "meshtron-s1-stage-b", "storage": "sqlite:///sweep_s1_b.db"},
+    {"name": "meshtron-s1-stage-c", "storage": "sqlite:///sweep_s1_c.db"},
+    {"name": "meshtron-s3-stage-a", "storage": "sqlite:///sweep_s3_a.db"},
+    {"name": "meshtron-s3-stage-b", "storage": "sqlite:///sweep_s3_b.db"},
+    {"name": "meshtron-s3-stage-c", "storage": "sqlite:///sweep_s3_c.db"}
+  ]
+}

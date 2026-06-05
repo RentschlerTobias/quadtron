@@ -1,0 +1,68 @@
+<!DOCTYPE html><html><head>
+<meta charset='utf-8'>
+<title>Meshtron Optuna Analysis</title>
+<style>
+body{font-family:sans-serif;margin:20px;background:#fafafa}
+h1{color:#222;border-bottom:2px solid #333;padding-bottom:8px}
+h2{color:#444;margin-top:40px}
+h3{color:#666;margin-top:20px}
+table{border-collapse:collapse;margin:15px 0;width:100%;max-width:900px}
+th,td{border:1px solid #bbb;padding:8px 12px;text-align:left}
+th{background:#222;color:#fff}
+tr:nth-child(even){background:#f2f2f2}
+img{max-width:100%;height:auto;margin:8px 0;border:1px solid #ddd;background:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(450px,1fr));gap:20px;margin:15px 0}
+.card{background:#fff;padding:15px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+.card h3{margin-top:0;color:#333}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;color:#fff;font-size:12px}
+.s0{background:#2196F3}.s1{background:#4CAF50}.s3{background:#FF9800}
+a{color:#1565C0}
+</style></head><body>
+<h1>Meshtron Full Optimization — Optuna Study Analysis</h1>
+<p>Sorting strategies: <span class='badge s0'>S0 = Baseline</span> <span class='badge s1'>S1 = Novel method</span> <span class='badge s3'>S3 = Adjacency + deduplication</span></p>
+<h2>Best Value Ranking</h2>
+<table><tr><th>Rank</th><th>Sort</th><th>Stage</th><th>Trials</th><th>Best Val BPT</th><th>vs S0</th></tr>
+<tr><td>1</td><td>S1</td><td>b</td><td>14</td><td>0.335082</td><td>-4.96%</td></tr>
+<tr><td>2</td><td>S0</td><td>b</td><td>15</td><td>0.352555</td><td>—</td></tr>
+<tr><td>3</td><td>S0</td><td>c</td><td>8</td><td>0.362469</td><td>—</td></tr>
+<tr><td>4</td><td>S1</td><td>c</td><td>9</td><td>0.371887</td><td>2.60%</td></tr>
+<tr><td>5</td><td>S1</td><td>a</td><td>19</td><td>0.397985</td><td>-5.86%</td></tr>
+<tr><td>6</td><td>S0</td><td>a</td><td>17</td><td>0.422776</td><td>—</td></tr>
+<tr><td>7</td><td>S3</td><td>b</td><td>11</td><td>0.521200</td><td>47.84%</td></tr>
+<tr><td>8</td><td>S3</td><td>a</td><td>20</td><td>0.573005</td><td>35.53%</td></tr>
+<tr><td>9</td><td>S3</td><td>c</td><td>9</td><td>0.578343</td><td>59.56%</td></tr>
+</table>
+<h2>Optimization History Overview</h2>
+<img src='opt_history_overview.png' onclick="this.style.width=this.style.width==='100%'?'auto':'100%'">
+<h2>Stage Comparison</h2>
+<div class='grid'>
+<div class='card'><h3>Architecture (Stage A)</h3><img src='stage_comparison_a.png'></div>
+<div class='card'><h3>Hyperparameters (Stage B)</h3><img src='stage_comparison_b.png'></div>
+<div class='card'><h3>Training Dynamics (Stage C)</h3><img src='stage_comparison_c.png'></div>
+</div>
+<h2>Best Value Summary</h2>
+<img src='best_value_summary.png' onclick="this.style.width=this.style.width==='100%'?'auto':'100%'">
+<h2>Convergence Comparison</h2>
+<img src='convergence_all.png' onclick="this.style.width=this.style.width==='100%'?'auto':'100%'">
+<h2>Sorting 0: Sorting 0 (Baseline)</h2>
+<div class='grid'>
+<div class='card'><h3>Stage A: Architecture (Stage A)</h3><p>Trials: 17, Best: 0.422776</p><p></p></div>
+<div class='card'><h3>Stage B: Hyperparameters (Stage B)</h3><p>Trials: 15, Best: 0.352555</p><p></p></div>
+<div class='card'><h3>Stage C: Training Dynamics (Stage C)</h3><p>Trials: 8, Best: 0.362469</p><p></p></div>
+<div class='card'><h3>Top 10 Params (aggregated)</h3><img src='param_importance_top10_s0.png'></div>
+</div>
+<h2>Sorting 1: Sorting 1 (Novel)</h2>
+<div class='grid'>
+<div class='card'><h3>Stage A: Architecture (Stage A)</h3><p>Trials: 19, Best: 0.397985</p><p></p></div>
+<div class='card'><h3>Stage B: Hyperparameters (Stage B)</h3><p>Trials: 14, Best: 0.335082</p><p></p></div>
+<div class='card'><h3>Stage C: Training Dynamics (Stage C)</h3><p>Trials: 9, Best: 0.371887</p><p></p></div>
+<div class='card'><h3>Top 10 Params (aggregated)</h3><img src='param_importance_top10_s1.png'></div>
+</div>
+<h2>Sorting 3: Sorting 3 (Adjacency + Deduplication)</h2>
+<div class='grid'>
+<div class='card'><h3>Stage A: Architecture (Stage A)</h3><p>Trials: 20, Best: 0.573005</p><p></p></div>
+<div class='card'><h3>Stage B: Hyperparameters (Stage B)</h3><p>Trials: 11, Best: 0.521200</p><p></p></div>
+<div class='card'><h3>Stage C: Training Dynamics (Stage C)</h3><p>Trials: 9, Best: 0.578343</p><p></p></div>
+<div class='card'><h3>Top 10 Params (aggregated)</h3><img src='param_importance_top10_s3.png'></div>
+</div>
+</body></html>

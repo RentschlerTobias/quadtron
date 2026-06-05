@@ -1,0 +1,12 @@
+{
+  "t_total_s": 324.804,
+  "best_val_bpt": 0.5789225281190349,
+  "best_val_nll": 0.4012785181283447,
+  "best_val_perplexity": 1.4937332423560483,
+  "best_epoch": 16,
+  "final_train_bpt": 0.14805395808279923,
+  "final_val_bpt": 0.6046613172025435,
+  "epochs_run": 24,
+  "config_hash": "cac5c260",
+  "run_dir": "/sandbox/logs_meshtron-s3-stage-c/cac5c260"
+}

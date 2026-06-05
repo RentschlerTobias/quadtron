@@ -1,0 +1,218 @@
+{
+  "optimization_summaries": {
+    "s0_stage_a": {
+      "best_value": 0.42277609177744957,
+      "best_params": {
+        "d_model": 512,
+        "n_stages": 5,
+        "layer_0": 4,
+        "layer_1": 6,
+        "layer_2": 2,
+        "layer_3": 6,
+        "layer_4": 6,
+        "n_latents": 8
+      },
+      "n_trials": 25,
+      "elapsed_seconds": 3286.0134782791138
+    },
+    "s0_stage_b": {
+      "best_value": 0.35255489029887205,
+      "best_params": {
+        "learning_rate": 0.0008654499882904198,
+        "warmup_steps": 600,
+        "dropout": 0.1718925413773733,
+        "weight_decay": 0.04179549966000011
+      },
+      "n_trials": 25,
+      "elapsed_seconds": 4475.24972486496
+    },
+    "s0_stage_c": {
+      "best_value": 0.3624689839250072,
+      "best_params": {
+        "batch_size": 16,
+        "accumulation_steps": 1,
+        "learning_rate": 0.0003737325504074314
+      },
+      "n_trials": 20,
+      "elapsed_seconds": 5114.845194816589
+    },
+    "s1_stage_a": {
+      "best_value": 0.3979846079710525,
+      "best_params": {
+        "d_model": 512,
+        "n_stages": 4,
+        "layer_0": 6,
+        "layer_1": 6,
+        "layer_2": 2,
+        "layer_3": 6,
+        "n_latents": 16
+      },
+      "n_trials": 25,
+      "elapsed_seconds": 3409.9063923358917
+    },
+    "s1_stage_b": {
+      "best_value": 0.33508153695053156,
+      "best_params": {
+        "learning_rate": 0.0008654499882904198,
+        "warmup_steps": 600,
+        "dropout": 0.1718925413773733,
+        "weight_decay": 0.04179549966000011
+      },
+      "n_trials": 25,
+      "elapsed_seconds": 3622.164994955063
+    },
+    "s1_stage_c": {
+      "best_value": 0.3718868370257823,
+      "best_params": {
+        "batch_size": 8,
+        "accumulation_steps": 1,
+        "learning_rate": 0.0001303419714362367
+      },
+      "n_trials": 20,
+      "elapsed_seconds": 4116.820217370987
+    },
+    "s3_stage_a": {
+      "best_value": 0.573004970127841,
+      "best_params": {
+        "d_model": 512,
+        "n_stages": 5,
+        "layer_0": 4,
+        "layer_1": 6,
+        "layer_2": 2,
+        "layer_3": 6,
+        "layer_4": 6,
+        "n_latents": 8
+      },
+      "n_trials": 25,
+      "elapsed_seconds": 2468.6261615753174
+    },
+    "s3_stage_b": {
+      "best_value": 0.521200262546195,
+      "best_params": {
+        "learning_rate": 0.0005713264391372235,
+        "warmup_steps": 600,
+        "dropout": 0.11756128972943938,
+        "weight_decay": 0.05918109105759507
+      },
+      "n_trials": 25,
+      "elapsed_seconds": 2407.6589272022247
+    },
+    "s3_stage_c": {
+      "best_value": 0.578343197120354,
+      "best_params": {
+        "batch_size": 8,
+        "accumulation_steps": 1,
+        "learning_rate": 0.0001303419714362367
+      },
+      "n_trials": 20,
+      "elapsed_seconds": 3612.0699846744537
+    }
+  },
+  "final_comparison": {
+    "n_seeds": 3,
+    "results": {
+      "0": {
+        "mean_val_bpt": 0.3977956412854376,
+        "std_val_bpt": 0.020930230122378997,
+        "mean_val_perplexity": 1.3176323935311613,
+        "individual_runs": [
+          {
+            "seed": 0,
+            "best_val_bpt": 0.3792960525749775,
+            "best_val_perplexity": 1.3007070346628653,
+            "best_epoch": 14,
+            "epochs_run": 15,
+            "config_hash": "365911b0",
+            "run_dir": "runs/365911b0"
+          },
+          {
+            "seed": 1,
+            "best_val_bpt": 0.3870345457898521,
+            "best_val_perplexity": 1.3077026615164153,
+            "best_epoch": 14,
+            "epochs_run": 15,
+            "config_hash": "ca2feb8a",
+            "run_dir": "runs/ca2feb8a"
+          },
+          {
+            "seed": 2,
+            "best_val_bpt": 0.42705632549148326,
+            "best_val_perplexity": 1.3444874844142038,
+            "best_epoch": 14,
+            "epochs_run": 15,
+            "config_hash": "a2cfebcd",
+            "run_dir": "runs/a2cfebcd"
+          }
+        ]
+      },
+      "1": {
+        "mean_val_bpt": 0.3841220425903966,
+        "std_val_bpt": 0.01279548663995021,
+        "mean_val_perplexity": 1.3051166081582863,
+        "individual_runs": [
+          {
+            "seed": 0,
+            "best_val_bpt": 0.3974858581435849,
+            "best_val_perplexity": 1.3172104459176763,
+            "best_epoch": 14,
+            "epochs_run": 15,
+            "config_hash": "1cf42c51",
+            "run_dir": "runs/1cf42c51"
+          },
+          {
+            "seed": 1,
+            "best_val_bpt": 0.3880062619626204,
+            "best_val_perplexity": 1.3085837513003833,
+            "best_epoch": 14,
+            "epochs_run": 15,
+            "config_hash": "9e6611c9",
+            "run_dir": "runs/9e6611c9"
+          },
+          {
+            "seed": 2,
+            "best_val_bpt": 0.36687400766498446,
+            "best_val_perplexity": 1.2895556272567996,
+            "best_epoch": 14,
+            "epochs_run": 15,
+            "config_hash": "f72476c9",
+            "run_dir": "runs/f72476c9"
+          }
+        ]
+      },
+      "3": {
+        "mean_val_bpt": 0.5514617798607131,
+        "std_val_bpt": 0.012161213938068356,
+        "mean_val_perplexity": 1.4656220398923596,
+        "individual_runs": [
+          {
+            "seed": 0,
+            "best_val_bpt": 0.56798859948189,
+            "best_val_perplexity": 1.4824552950434877,
+            "best_epoch": 14,
+            "epochs_run": 15,
+            "config_hash": "911b9b88",
+            "run_dir": "runs/911b9b88"
+          },
+          {
+            "seed": 1,
+            "best_val_bpt": 0.5473203673303292,
+            "best_val_perplexity": 1.461368856587076,
+            "best_epoch": 14,
+            "epochs_run": 15,
+            "config_hash": "838b1dfb",
+            "run_dir": "runs/838b1dfb"
+          },
+          {
+            "seed": 2,
+            "best_val_bpt": 0.53907637276992,
+            "best_val_perplexity": 1.4530419680465156,
+            "best_epoch": 14,
+            "epochs_run": 15,
+            "config_hash": "6c39d153",
+            "run_dir": "runs/6c39d153"
+          }
+        ]
+      }
+    }
+  }
+}
