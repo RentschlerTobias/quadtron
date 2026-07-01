@@ -62,3 +62,67 @@ class TrainingConfig:
         if "stage_layers" in data and isinstance(data["stage_layers"], list):
             data = {**data, "stage_layers": tuple(data["stage_layers"])}
         return cls(**data)
+
+
+@dataclass(frozen=True)
+class DomainTrainingConfig:
+    """Konfiguration für Domain-Partition Training."""
+
+    # Daten
+    data_path: str = "/root/repos/meshtron/domain_data.pt"
+    train_val_ratio: float = 0.8
+    sorting_strategy: int = 0       # 0=no compression, 1=row-compressed, 2=vertex-first
+    embedding_mode: int = 0          # 0=split vocab, 1=shared, 2=separate
+    quantization_r: int = 512
+    quantization_a: int = 256
+    n_sample_points: int = 1500
+
+    # Modell
+    d_model: int = 512
+    n_heads: int = 8
+    stage_layers: tuple = (2, 4, 6, 8, 10)
+    n_latents: int = 512
+    dropout: float = 0.1
+    ffn_mult: int = 4
+
+    # Optimierung
+    learning_rate: float = 1e-4
+    weight_decay: float = 0.01
+    warmup_steps: int = 500
+    grad_clip: float = 1.0
+    batch_size: int = 8
+    accumulation_steps: int = 1
+    num_epochs: int = 50
+    early_stopping_patience: int = 25
+    max_val_batches: int = 0
+
+    # Validierung
+    val_every_n_epochs: int = 1
+
+    # Laufzeit
+    seed: int = 0
+    precision: str = "bf16"
+    cudnn_deterministic: bool = False
+    num_workers: int = 0
+    pin_memory: bool = True
+
+    # Persistenz / Logging
+    log_dir: str = "runs_domain"
+    save_best: bool = True
+    save_last: bool = False
+
+    def hash(self) -> str:
+        payload = json.dumps(asdict(self), sort_keys=True, default=str)
+        return sha1(payload.encode()).hexdigest()[:8]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    def to_json(self, path: Path) -> None:
+        Path(path).write_text(json.dumps(asdict(self), indent=2, default=str))
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "DomainTrainingConfig":
+        if "stage_layers" in data and isinstance(data["stage_layers"], list):
+            data = {**data, "stage_layers": tuple(data["stage_layers"])}
+        return cls(**data)
