@@ -1,4 +1,7 @@
 checkpoints/
+runs_domain/
+runs_domain_test/
+runs/
 __pycache__/
 figures/
 *.pyc
