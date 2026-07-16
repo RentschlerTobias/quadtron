@@ -7,8 +7,11 @@ Autoregressive Generierung + Hermite-Spline Rekonstruktion + Transfinite Interpo
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Tuple
+
+_HERE = Path(os.path.dirname(os.path.abspath(__file__)))
 
 import torch
 import numpy as np
@@ -29,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--ckpt", type=str, default="best.pt",
                    help="Checkpoint filename inside the run dir.")
     p.add_argument("--data-path", type=Path,
-                   default=Path("/root/repos/meshtron/domain_data.pt"),
+                   default=_HERE / "domain_data.pt",
                    help="Path to domain_data.pt")
     p.add_argument("--n-sample-points", type=int, default=None,
                    help="Override n_sample_points")
@@ -105,7 +108,7 @@ def main() -> None:
     )
 
     # Ground Truth für Vergleich
-    original_meshes = torch.load("/root/repos/meshtron/checkpoint_mesh_100.pt", weights_only=False)
+    original_meshes = torch.load(str(_HERE / "checkpoint_mesh_100.pt"), weights_only=False)
 
     summary = {
         "run_dir": str(args.run_dir),

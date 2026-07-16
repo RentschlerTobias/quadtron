@@ -16,9 +16,14 @@ import numpy as np
 import torch
 from pathlib import Path
 
+import os
 import sys
-sys.path.insert(0, '/root/repos/meshtron')
-sys.path.insert(0, '/root/repos/domain_partition/tools')
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_TOOLS = os.path.normpath(os.path.join(
+    _HERE, '..', 'domain_partition', 'domain_partition_2D', 'tools'))
+sys.path.insert(0, _HERE)
+sys.path.insert(0, _TOOLS)
 
 from tokenizer_domain import DomainTokenizer
 from reconstruct_domain import reconstruct_blocked_mesh, reconstruct_domain
@@ -205,7 +210,7 @@ def plot_pipeline(mesh_data, tokenizer, output_dir='./figures/pipeline', mesh_id
     ax6.set_title('6. Vergleich: Ground Truth (blau) vs. Rekonstruiert (rot)', fontsize=12, fontweight='bold')
 
     # GT: Original fine mesh
-    original_meshes = torch.load('/root/repos/meshtron/checkpoint_mesh_100.pt', weights_only=False)
+    original_meshes = torch.load(os.path.join(_HERE, 'checkpoint_mesh_100.pt'), weights_only=False)
     gt_mesh = original_meshes[mesh_idx]
     gt_nodes = gt_mesh.quad_coordinates.numpy()
     gt_faces = gt_mesh.quad_faces.numpy()
@@ -321,7 +326,7 @@ def plot_comparison_grid(tokenizer, data, indices=[0, 10, 20, 30], output_dir='.
         center = mesh_data['center'].numpy()
 
         # GT
-        original_meshes = torch.load('/root/repos/meshtron/checkpoint_mesh_100.pt', weights_only=False)
+        original_meshes = torch.load(os.path.join(_HERE, 'checkpoint_mesh_100.pt'), weights_only=False)
         gt_mesh = original_meshes[idx]
         gt_nodes = gt_mesh.quad_coordinates.numpy()
         gt_faces = gt_mesh.quad_faces.numpy()
@@ -364,10 +369,10 @@ def plot_comparison_grid(tokenizer, data, indices=[0, 10, 20, 30], output_dir='.
 
 if __name__ == '__main__':
     # Daten laden
-    data = torch.load('/root/repos/meshtron/domain_data.pt', weights_only=False)
+    data = torch.load(os.path.join(_HERE, 'domain_data.pt'), weights_only=False)
 
     # Tokenizer
-    tok = DomainTokenizer(quantization_r=64, quantization_a=32,
+    tok = DomainTokenizer(quantization_r=512, quantization_a=256,
                          sorting_strategy=0, embedding_mode=0, verbose=False)
 
     # Pipeline-Plots fuer Mesh 0, 10, 20

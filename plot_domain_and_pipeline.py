@@ -1,24 +1,29 @@
 """
 Plot: Domain data + Tokenize -> Detokenize -> Hermite Spline pipeline
 """
+import os
 import sys
-sys.path.insert(0, '/home/t1dde/Duty/projects/mesh/meshtron')
-sys.path.insert(0, '/home/t1dde/Duty/projects/mesh/domain_partition/domain_partition_repo/tools')
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_TOOLS = os.path.normpath(os.path.join(
+    _HERE, '..', 'domain_partition', 'domain_partition_2D', 'tools'))
+sys.path.insert(0, _HERE)
+sys.path.insert(0, _TOOLS)
 
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
 from tokenizer_domain import DomainTokenizer
-from reconstruct_domain import reconstruct_blocked_mesh, reconstruct_domain
-from transfinite_interpolation import Transfinite_Interpolation
+from reconstruct_domain import (reconstruct_blocked_mesh, reconstruct_domain,
+                                reconstruct_domain_coons)
 
 # Daten laden
-data = torch.load('/home/t1dde/Duty/projects/mesh/meshtron/domain_data.pt', weights_only=False)
+data = torch.load(os.path.join(_HERE, 'domain_data.pt'), weights_only=False)
 mesh = data[0]
 center = mesh['center'].numpy()
 
 # Tokenizer
-tok = DomainTokenizer(quantization_r=64, quantization_a=32,
+tok = DomainTokenizer(quantization_r=512, quantization_a=256,
                        sorting_strategy=0, embedding_mode=0, verbose=False)
 
 # Tokenisierung
@@ -27,8 +32,8 @@ output = tok.detokenize(tokens)
 
 # Rekonstruktion
 blocked_mesh = reconstruct_blocked_mesh(output, center)
-interpolator = Transfinite_Interpolation(blocked_mesh, mesh_size=0.4)
-quad_mesh = interpolator.quad_mesh
+# Per-Block Coons-TFI (wie domain_partition_3D) -> Airfoil-Loch bleibt hohl
+quad_mesh = reconstruct_domain_coons(output, center, n=11)
 
 # --------------------------------------------------
 # Plot 1: Domain Data (Eingabe)
@@ -71,7 +76,7 @@ ax1.set_xlabel('x')
 ax1.set_ylabel('y')
 ax1.legend(loc='upper right', fontsize=9)
 plt.tight_layout()
-plt.savefig('/home/t1dde/Duty/projects/mesh/meshtron/figures/domain_data_mesh0.png', dpi=200, bbox_inches='tight', facecolor='white')
+plt.savefig(os.path.join(_HERE, 'figures', 'domain_data_mesh0.png'), dpi=200, bbox_inches='tight', facecolor='white')
 plt.close()
 print("Saved: figures/domain_data_mesh0.png")
 
@@ -140,10 +145,16 @@ for fi, face in enumerate(faces_as_places):
     for i, p in enumerate(face):
         faces_recon[i, fi] = place_to_unique[p]
 
+# Farbe je rekonstruierter Face nach passender ORIGINAL-Face (gleicher Block =
+# gleiche Farbe wie in Subplot A), damit A und C direkt vergleichbar sind.
+orig_faces = faces.numpy()  # [4, nf]
+orig_centroids = vertices_cart[orig_faces.T].mean(axis=1)  # [nf, 2]
 for fi in range(faces_recon.shape[1]):
     face = faces_recon[:, fi]
     coords = unique_verts[face]
-    color = plt.cm.Set3(fi / max(faces_recon.shape[1] - 1, 1))
+    rc = coords.mean(axis=0)
+    oi = int(np.argmin(np.linalg.norm(orig_centroids - rc, axis=1)))
+    color = plt.cm.Set3(oi / max(orig_faces.shape[1] - 1, 1))
     ax_c.fill(coords[:, 0], coords[:, 1], color=color, alpha=0.3, edgecolor='grey', linewidth=0.5)
 
 ax_c.scatter(unique_verts[:, 0], unique_verts[:, 1], s=80, c='red', zorder=5, edgecolors='darkred', linewidth=1.5)
@@ -198,7 +209,7 @@ ax_f = fig2.add_subplot(gs[1, 2])
 ax_f.set_title('F. Ground Truth (blau) vs Reconstructed (rot)', fontsize=12, fontweight='bold')
 
 # GT
-original_meshes = torch.load('/home/t1dde/Duty/projects/mesh/meshtron/checkpoint_mesh_100.pt', weights_only=False)
+original_meshes = torch.load(os.path.join(_HERE, 'checkpoint_mesh_100.pt'), weights_only=False)
 gt_mesh = original_meshes[0]
 gt_nodes = gt_mesh.quad_coordinates.numpy()
 gt_faces = gt_mesh.quad_faces.numpy()
@@ -219,7 +230,7 @@ ax_f.set_ylabel('y')
 
 fig2.suptitle('Tokenize -> Detokenize -> Hermite Spline -> Transfinite Interpolation Pipeline',
               fontsize=16, fontweight='bold', y=0.98)
-plt.savefig('/home/t1dde/Duty/projects/mesh/meshtron/figures/tokenize_pipeline_mesh0.png', dpi=200, bbox_inches='tight', facecolor='white')
+plt.savefig(os.path.join(_HERE, 'figures', 'tokenize_pipeline_mesh0.png'), dpi=200, bbox_inches='tight', facecolor='white')
 plt.close()
 print("Saved: figures/tokenize_pipeline_mesh0.png")
 print("Done!")
