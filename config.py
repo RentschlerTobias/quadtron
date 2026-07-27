@@ -69,13 +69,13 @@ class DomainTrainingConfig:
     """Konfiguration für Domain-Partition Training."""
 
     # Daten
-    data_path: str = "/root/repos/meshtron/domain_data.pt"
+    data_path: str = "./domain_data_10k.pt"
     train_val_ratio: float = 0.8
     sorting_strategy: int = 0       # 0=no compression, 1=row-compressed, 2=vertex-first
     embedding_mode: int = 0          # 0=split vocab, 1=shared, 2=separate
     quantization_r: int = 512
     quantization_a: int = 256
-    n_sample_points: int = 1500
+    n_sample_points: int = 768       # < min Punktzahl (372..819) im 10k-Datensatz
 
     # Modell
     d_model: int = 512

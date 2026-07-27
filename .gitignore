@@ -9,3 +9,6 @@ figures/
 *.png
 *.pt
 *.db
+*.tar.xz
+*.tar.zst
+quad_domain_data/
