@@ -104,6 +104,7 @@ def main() -> None:
     test_data = DomainMeshData(
         meshes, tokenizer,
         n_sample_points=n_sample_points,
+        with_labels=getattr(cfg, 'point_cloud_labels', False),
         verbose=False,
     )
 

@@ -25,11 +25,13 @@ class DomainMeshData(Dataset):
         tokenizer: DomainTokenizer,
         max_seq_length: Optional[int] = None,
         n_sample_points: int = 1500,
+        with_labels: bool = False,
         verbose: bool = True,
     ):
         self.meshes = meshes
         self.tokenizer = tokenizer
         self.n_sample_points = n_sample_points
+        self.with_labels = with_labels
         self.data: List[List[int]] = []
         self.face_count: List[int] = []
 
@@ -53,40 +55,47 @@ class DomainMeshData(Dataset):
             print(f"\nMax Sequenzlänge: {self.max_seq_length}\nMin Sequenzlänge: {self.min_seq_length}")
 
     def _sample_point_cloud(self, tri_coordinates: torch.Tensor) -> torch.Tensor:
-        """Sample point cloud: keep boundary, fill rest with interior + noise."""
-        mask = tri_coordinates[:, 2] != 2
-        boundary_points = tri_coordinates[mask, :2]
-        interior_points = tri_coordinates[~mask, :2]
+        """Sample point cloud. Prioritaet: Ecken(Label 0) > Rand(1) > Feld(2).
+        Ecken UND Rand werden IMMER vollstaendig behalten (nie durch Sampling
+        verworfen), der Rest mit Feld-Punkten (ggf. wiederholt+Noise) aufgefuellt.
+        with_labels=True -> Ausgabe [n, 3] mit Label-Spalte (0/1/2, Pad=3), sonst
+        [n, 2]. Nur die x/y werden auf [-1,1] normalisiert, das Label bleibt."""
+        n = self.n_sample_points
+        labels = tri_coordinates[:, 2].long()
+        keep = tri_coordinates[labels != 2]          # Ecken(0) + Rand(1), IMMER behalten
+        field = tri_coordinates[labels == 2]         # Feld(2), fuellt auf
+        nk = keep.size(0)
 
-        num_boundary = boundary_points.size(0)
-        num_interior = interior_points.size(0)
-        remaining = self.n_sample_points - num_boundary
-
-        point_cloud = torch.ones([self.n_sample_points, 2]) * (-1)
-        if num_boundary >= self.n_sample_points:
-            idx = torch.randint(0, num_boundary, [self.n_sample_points])
-            point_cloud[:, :] = boundary_points[idx, :]
+        if nk >= n:
+            # sehr selten (Ecken+Rand > n): Ecken zuerst, Rest zufaellig aus Rand
+            corners = tri_coordinates[labels == 0]
+            bound = tri_coordinates[labels == 1]
+            nc = corners.size(0)
+            idx = torch.randperm(bound.size(0))[:max(0, n - nc)]
+            cloud = torch.cat([corners[:n], bound[idx]], dim=0)[:n]
         else:
-            points = [boundary_points]
-            if num_interior >= remaining:
-                idx = torch.randint(0, num_interior, (remaining,))
-                points.append(interior_points[idx, :])
+            rem = n - nk
+            nf = field.size(0)
+            if nf == 0:
+                fill = keep[torch.randint(0, nk, (rem,))]
+            elif nf >= rem:
+                fill = field[torch.randint(0, nf, (rem,))]
             else:
-                repeat_factor = (remaining + num_interior - 1) // num_interior
-                interior_repeated = interior_points.repeat(repeat_factor, 1)
-                noise = torch.rand_like(interior_repeated) * 0.001
-                noisy_interior = interior_repeated + noise
-                idx = torch.randint(0, noisy_interior.size(0), (remaining,))
-                points.append(noisy_interior[idx, :])
-            point_cloud = torch.cat(points, dim=0)
+                rep = (rem + nf - 1) // nf
+                field_rep = field.repeat(rep, 1)
+                field_rep[:, :2] = field_rep[:, :2] + torch.rand_like(field_rep[:, :2]) * 0.001
+                fill = field_rep[torch.randint(0, field_rep.size(0), (rem,))]
+            cloud = torch.cat([keep, fill], dim=0)   # [n, 3]
 
-        # Normalisierung wie in dataset.py: [-1, 1]
+        # Normalisierung der x/y wie in dataset.py: [-1, 1]; Label unberuehrt
         all_coords = tri_coordinates[:, :2]
         center = (all_coords.max(dim=0).values + all_coords.min(dim=0).values) / 2
         scale = (all_coords.max(dim=0).values - all_coords.min(dim=0).values).max().clamp(min=1e-6)
-        point_cloud = (point_cloud - center) / scale * 2
+        xy = (cloud[:, :2] - center) / scale * 2
 
-        return point_cloud
+        if self.with_labels:
+            return torch.cat([xy, cloud[:, 2:3]], dim=1)         # [n, 3]
+        return xy                                                # [n, 2]
 
     def __len__(self):
         return len(self.data)

@@ -60,6 +60,7 @@ class DomainTrainer:
             max_seq_length=self.max_length,
             n_latents=cfg.n_latents,
             input_dim=2,
+            n_point_labels=4 if getattr(cfg, 'point_cloud_labels', False) else None,
             min_face_count=self.min_face_count,
             max_face_count=self.max_face_count,
             n_heads=cfg.n_heads,
@@ -89,7 +90,7 @@ class DomainTrainer:
             "fp16": torch.float16,
         }.get(cfg.precision)
         self.use_autocast = self.amp_dtype is not None and self.device.type == "cuda"
-        self.scaler = torch.cuda.amp.GradScaler(enabled=(cfg.precision == "fp16"))
+        self.scaler = torch.amp.GradScaler('cuda', enabled=(cfg.precision == "fp16"))
 
         self.config_hash = cfg.hash()
         self.logger = JSONLLogger(cfg.log_dir, self.config_hash, cfg.to_dict())
@@ -261,16 +262,19 @@ class DomainTrainer:
             generator=gen,
         )
 
+        wl = getattr(self.cfg, 'point_cloud_labels', False)
         train_dataset = DomainMeshData(
             list(train_meshes),
             self.tokenizer,
             n_sample_points=self.cfg.n_sample_points,
+            with_labels=wl,
             verbose=False,
         )
         val_dataset = DomainMeshData(
             list(val_meshes),
             self.tokenizer,
             n_sample_points=self.cfg.n_sample_points,
+            with_labels=wl,
             verbose=False,
         )
 

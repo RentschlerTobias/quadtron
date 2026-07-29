@@ -76,6 +76,9 @@ class DomainTrainingConfig:
     quantization_r: int = 512
     quantization_a: int = 256
     n_sample_points: int = 768       # < min Punktzahl (372..819) im 10k-Datensatz
+    point_cloud_labels: bool = True  # Label {0=Ecke,1=Rand,2=Feld} an Punktwolke
+    #                                  anhaengen + Ecken garantiert behalten
+    #                                  (Ecken = exakte Vertices, siehe Stufe-1-Befund)
 
     # Modell
     d_model: int = 512

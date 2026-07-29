@@ -18,15 +18,24 @@ def fourier_features(x, n_freqs=8):
 
 class PerceiverPointEncoder(nn.Module):
 
-    def __init__(self, d_model=128, input_dim=2, n_latents=32, n_freqs=8):
+    def __init__(self, d_model=128, input_dim=2, n_latents=32, n_freqs=8,
+                 n_point_labels=None):
+        """n_point_labels: wenn gesetzt, erwartet forward Punkte [B,N,input_dim+1],
+        wobei die LETZTE Spalte ein Kategorie-Label {0..n_point_labels-1} ist
+        (0=Singularitaet/Ecke, 1=Rand, 2=Feld, 3=Pad). Das Label wird per Embedding
+        addiert -> das Modell kann Ecken (=exakte Vertices) von Rand/Feld trennen.
+        None -> altes Verhalten (nur x,y)."""
         super().__init__()
 
         self.n_freqs = n_freqs
+        self.n_point_labels = n_point_labels
         fourier_dim = input_dim + 4 * n_freqs  # z.B. 2 + 32 = 34
 
         self.latents = nn.Parameter(torch.randn(n_latents, d_model))
 
         self.point_proj = nn.Linear(fourier_dim, d_model)
+        if n_point_labels is not None:
+            self.label_emb = nn.Embedding(n_point_labels, d_model)
 
         # Cross-attention: latents attend to points
         self.cross_attention = nn.MultiheadAttention(
@@ -54,13 +63,21 @@ class PerceiverPointEncoder(nn.Module):
 
     def forward(self, points):
         """
-        points: [batch, n_points, 2]
+        points: [batch, n_points, 2]  (oder [.,.,3] mit Label in Spalte -1, falls
+                n_point_labels gesetzt)
         output: [batch, n_latents, d_model]
         """
         batch_size = points.shape[0]
 
-        point_features = fourier_features(points, self.n_freqs)  # [B, N, 2+4*n_freqs]
-        point_features = self.point_proj(point_features)         # [B, N, d_model]
+        if self.n_point_labels is not None:
+            coords = points[..., :-1]                            # [B, N, 2]
+            labels = points[..., -1].long().clamp(0, self.n_point_labels - 1)
+            point_features = fourier_features(coords, self.n_freqs)
+            point_features = self.point_proj(point_features)     # [B, N, d_model]
+            point_features = point_features + self.label_emb(labels)
+        else:
+            point_features = fourier_features(points, self.n_freqs)  # [B, N, 2+4*nf]
+            point_features = self.point_proj(point_features)         # [B, N, d_model]
 
         latents = self.latents.unsqueeze(0).expand(batch_size, -1, -1)
 

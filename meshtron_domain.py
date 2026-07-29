@@ -27,6 +27,7 @@ class MeshtronDomain(nn.Module):
         max_seq_length: int = 1000,
         n_latents: int = 512,
         input_dim: int = 2,
+        n_point_labels: int = None,
         min_face_count: int = 1,
         max_face_count: int = 50,
         n_heads: int = 8,
@@ -59,6 +60,7 @@ class MeshtronDomain(nn.Module):
             d_model=d_model,
             input_dim=input_dim,
             n_latents=n_latents,
+            n_point_labels=n_point_labels,
         )
 
         if verbose:
@@ -88,7 +90,8 @@ class MeshtronDomain(nn.Module):
 
         Args:
             input_tokens: [batch_size, seq_len]
-            point_cloud: [batch_size, num_points, 2]
+            point_cloud: [batch_size, num_points, 2] (oder 3 mit Label-Spalte, falls
+                          n_point_labels gesetzt)
             face_count: [batch_size]
             position_ids: optional [batch_size, seq_len]
         """
