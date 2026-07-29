@@ -127,13 +127,13 @@ def fig3_sort(mesh, tok):
 def fig4_quantize(mesh, tok):
     vp = mesh["vertices_polar"]
     order = tok._sort_order(vp)
-    r_vals = vp[:, 0].numpy()
-    r_min, r_max = float(r_vals.min()), float(r_vals.max())
+    r_min, r_max = tok.R_MIN, tok.R_MAX            # FIXE Bounds (nicht per-Mesh)
 
     fig, ax = plt.subplots(figsize=(11, 6))
     ax.axis("off")
     ax.set_title("4) Stufe-1-Quantisierung: jeder Vertex → 3 Tokens  [r, θsin, θcos]\n"
-                 f"Qr={tok.Qr} (r-Bins),  Qa={tok.Qa} (Winkel-Bins)", fontsize=11)
+                 f"Qr={tok.Qr} (r-Bins),  Qa={tok.Qa} (Winkel-Bins),  "
+                 f"r-Bounds FIX [{r_min:.2f},{r_max:.2f}]", fontsize=11)
 
     header = ["new-Idx", "r", "θ (°)", "→ r_tok", "→ θsin_tok", "→ θcos_tok"]
     rows = []
@@ -411,8 +411,7 @@ def fig10_edge_tokenize(mesh, tok):
     et = mesh["edge_tangents"].numpy()
     e2s = mesh["edge_to_streamline"]
     tan = {(int(ei[0, e]), int(ei[1, e])): et[e] for e in range(ei.shape[1])}
-    tn_all = et[:, [1, 3]].ravel()
-    tn_min, tn_max = float(tn_all.min()), float(tn_all.max())
+    tn_min, tn_max = tok.TN_MIN, tok.TN_MAX        # FIXE Bounds (nicht per-Mesh)
 
     p0, p1 = pick_curved_edge(mesh)
     a_s, tn_s, a_e, tn_e = tan[(p0, p1)]
@@ -507,7 +506,7 @@ def fig11_compare_methods(mesh, tok):
     ei = mesh["edge_index"].numpy(); et = mesh["edge_tangents"].numpy()
     e2s = mesh["edge_to_streamline"]
     tan = {(int(ei[0, e]), int(ei[1, e])): et[e] for e in range(ei.shape[1])}
-    tn_all = et[:, [1, 3]].ravel(); tn_min, tn_max = float(tn_all.min()), float(tn_all.max())
+    tn_min, tn_max = tok.TN_MIN, tok.TN_MAX        # FIXE Bounds (nicht per-Mesh)
 
     p0, p1 = pick_curved_edge(mesh)
     a_s, tn_s, a_e, tn_e = tan[(p0, p1)]

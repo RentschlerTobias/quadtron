@@ -36,7 +36,7 @@ import torch
 
 class TwoStageTokenizer:
     def __init__(self, quantization_r=512, quantization_a=256, max_vertices=2048,
-                 repr_mode='hermite'):
+                 repr_mode='hermite', r_bounds=(0.0, 1.0), tn_bounds=(0.0, 1.0)):
         # repr_mode:
         #   'hermite' -> pro Half-Edge 6 Tokens (α_s sin/cos, tn_s, α_e sin/cos, tn_e).
         #                kubisch, kann Wendepunkte (S-Kurve), braucht Tangenten-Betrag.
@@ -63,6 +63,15 @@ class TwoStageTokenizer:
         # s = Position laengs der Sehne (0..1 normal), h = Auslenkung quer (Chord-Einheiten)
         self.S_MIN, self.S_MAX = -0.5, 1.5
         self.H_MIN, self.H_MAX = -1.2, 1.2
+
+        # FIXE globale Bounds (NICHT per-Mesh!) fuer r (Stufe 1) und tn (Hermite).
+        # Grund: das Modell kennt zur Inferenzzeit keine Ground-Truth-Bounds -> per-Mesh
+        # min/max waeren nicht dequantisierbar. r (Abstand zum center) und Tangenten-
+        # Magnitude leben in normalisierter Einheitsdomain -> [0,1] mit Puffer deckt den
+        # 10k-Datensatz (r in [0.013,0.910], tn in [0.0012,0.950]). fit_bounds() misst
+        # die Spanne exakt aus einem Datensatz.
+        self.R_MIN, self.R_MAX = r_bounds
+        self.TN_MIN, self.TN_MAX = tn_bounds
 
         base = self.off_idx + self.Vmax
         self.start_token = base + 0
@@ -104,6 +113,25 @@ class TwoStageTokenizer:
         # np.lexsort: letzter Key ist primaer
         return np.lexsort((r, th))
 
+    # ---- Bounds aus Datensatz messen -----------------------------------
+    @staticmethod
+    def fit_bounds(data, pad=0.02):
+        """Globale (r, tn)-Bounds aus einem Datensatz -> FIXE Bounds fuers Modell.
+
+        Einmal auf dem Trainingssatz bestimmen, dann an __init__(r_bounds=, tn_bounds=)
+        geben. pad = relativer Puffer auf die Spanne (Robustheit gegen neue Meshes).
+        Returns (r_bounds, tn_bounds) je als (min, max).
+        """
+        rmin, rmax = 1e9, -1e9
+        tnmin, tnmax = 1e9, -1e9
+        for d in data:
+            r = d['vertices_polar'][:, 0].numpy()
+            rmin = min(rmin, float(r.min())); rmax = max(rmax, float(r.max()))
+            et = d['edge_tangents'].numpy()[:, [1, 3]]
+            tnmin = min(tnmin, float(et.min())); tnmax = max(tnmax, float(et.max()))
+        rp = (rmax - rmin) * pad; tp = (tnmax - tnmin) * pad
+        return (rmin - rp, rmax + rp), (tnmin - tp, tnmax + tp)
+
     # ---- Tokenize ------------------------------------------------------
     def tokenize(self, mesh_data):
         vp = mesh_data['vertices_polar']          # [M,2] (r, theta)
@@ -116,9 +144,8 @@ class TwoStageTokenizer:
         old2new = np.empty(M, dtype=np.int64)
         old2new[order] = np.arange(M)
 
-        # Bounds fuer r (theta via sincos, braucht keine bounds)
-        r_vals = vp[:, 0].numpy()
-        r_min, r_max = float(r_vals.min()), float(r_vals.max())
+        # FIXE Bounds fuer r (nicht per-Mesh -> modelltauglich); theta via sincos braucht keine
+        r_min, r_max = self.R_MIN, self.R_MAX
 
         toks = [self.start_token]
 
@@ -146,8 +173,7 @@ class TwoStageTokenizer:
         ei = mesh_data['edge_index'].numpy()          # [2,E] global
         et = mesh_data['edge_tangents'].numpy()       # [E,4]
         tan = {(int(ei[0, e]), int(ei[1, e])): et[e] for e in range(ei.shape[1])}
-        tn_all = et[:, [1, 3]].ravel()
-        tn_min, tn_max = float(tn_all.min()), float(tn_all.max())
+        tn_min, tn_max = self.TN_MIN, self.TN_MAX   # FIXE Bounds (nicht per-Mesh)
         e2s = mesh_data['edge_to_streamline']         # (u,v) -> [N,2] global
         cart = mesh_data['vertices_cartesian'].numpy()
 
@@ -199,12 +225,19 @@ class TwoStageTokenizer:
         return toks, meta
 
     # ---- Detokenize ----------------------------------------------------
-    def detokenize(self, toks, r_min, r_max, tn_min=None, tn_max=None):
+    def detokenize(self, toks, r_min=None, r_max=None, tn_min=None, tn_max=None):
         """Rekonstruiert (vertices, faces_new, geom) aus der Sequenz.
 
         geom: Liste je Half-Edge [a_start, tn_start, a_end, tn_end] (rad/skaliert),
         Reihenfolge = Face-Traversal (fi, k). Leer, wenn keine Stufe-3-Sektion.
+
+        Bounds sind default die FIXEN self-Bounds -> kein per-Mesh meta noetig
+        (modelltauglich). Explizite Werte nur fuer Sonderfaelle/Tests.
         """
+        if r_min is None: r_min = self.R_MIN
+        if r_max is None: r_max = self.R_MAX
+        if tn_min is None: tn_min = self.TN_MIN
+        if tn_max is None: tn_max = self.TN_MAX
         try:
             i_start = toks.index(self.start_token)
         except ValueError:
@@ -247,11 +280,8 @@ class TwoStageTokenizer:
             if self.repr_mode == 'hermite':
                 a_s = self._dq_angle(g[0] - self.off_ts, g[1] - self.off_tc)
                 a_e = self._dq_angle(g[3] - self.off_ts, g[4] - self.off_tc)
-                if tn_min is not None:
-                    tn_s = self._dq_scalar(g[2] - self.off_r, tn_min, tn_max)
-                    tn_e = self._dq_scalar(g[5] - self.off_r, tn_min, tn_max)
-                else:
-                    tn_s = tn_e = None
+                tn_s = self._dq_scalar(g[2] - self.off_r, tn_min, tn_max)
+                tn_e = self._dq_scalar(g[5] - self.off_r, tn_min, tn_max)
                 geom.append([a_s, tn_s, a_e, tn_e])
             elif self.repr_mode == 'cubic_bezier':  # 4 Skalare s1,h1,s2,h2 (Chord-lokal)
                 s1 = self._dq_scalar(g[0] - self.off_r, self.S_MIN, self.S_MAX)
@@ -395,8 +425,7 @@ def round_trip_report(data, tok, n_max=None, verbose_fail=3):
         vp = d['vertices_polar']
         toks, meta = tok.tokenize(d)
         seq_lens.append(len(toks))
-        verts, faces_new, geom = tok.detokenize(
-            toks, meta['r_min'], meta['r_max'], meta['tn_min'], meta['tn_max'])
+        verts, faces_new, geom = tok.detokenize(toks)   # nutzt FIXE self-Bounds
 
         # --- Geometrie Stufe 3: rekonstruierte Kurven vs. edge_to_streamline ---
         center = d['center'].numpy()
@@ -471,6 +500,8 @@ if __name__ == '__main__':
     ap.add_argument('--qa', type=int, default=256)
     ap.add_argument('--mode', default='hermite',
                     choices=['hermite', 'bezier', 'cubic_bezier'])
+    ap.add_argument('--fit-bounds', action='store_true',
+                    help='globale r/tn-Bounds aus dem Datensatz messen statt Default [0,1]')
     args = ap.parse_args()
 
     print(f"Lade {args.data} ...")
@@ -481,8 +512,15 @@ if __name__ == '__main__':
     max_v = max(d['vertices_polar'].shape[0] for d in data)
     print(f"max Vertices im Datensatz: {max_v}")
 
+    # FIXE Bounds: Default [0,1]; --fit-bounds misst die Spanne aus dem Set
+    r_bounds, tn_bounds = (0.0, 1.0), (0.0, 1.0)
+    if args.fit_bounds:
+        r_bounds, tn_bounds = TwoStageTokenizer.fit_bounds(data)
+
     tok = TwoStageTokenizer(quantization_r=args.qr, quantization_a=args.qa,
-                            max_vertices=max_v + 16, repr_mode=args.mode)
+                            max_vertices=max_v + 16, repr_mode=args.mode,
+                            r_bounds=r_bounds, tn_bounds=tn_bounds)
     print(f"repr_mode: {args.mode}  ({tok.geom_per_edge} geom-Tokens/Half-Edge)")
+    print(f"Bounds  : r [{tok.R_MIN:.3f},{tok.R_MAX:.3f}]  tn [{tok.TN_MIN:.3f},{tok.TN_MAX:.3f}]  (FIX)")
     ok = round_trip_report(data, tok, n_max=args.n)
     print("\nRESULT:", "PASS (Topologie 100% exakt)" if ok else "TEILWEISE (siehe fails)")
