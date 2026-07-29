@@ -12,3 +12,4 @@ figures/
 *.tar.xz
 *.tar.zst
 quad_domain_data/
+.venv/
