@@ -158,6 +158,8 @@ def main():
     ap.add_argument('--gallery', type=int, default=6)
     ap.add_argument('--limit', type=int, default=None)
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--save-dir', default=None, help='3 Koepfe nach Training hier speichern')
+    ap.add_argument('--load-dir', default=None, help='3 Koepfe laden, Training ueberspringen')
     ap.add_argument('--out', default='figures/e2e/e2e_gallery.png')
     args = ap.parse_args()
 
@@ -184,16 +186,34 @@ def main():
     val_ids = perm[:n_val]; train_ids = perm[n_val:]
     print(f"split: {len(train_ids)} train / {len(val_ids)} val")
 
-    print("== Training 3 Koepfe ==")
     vmodel = vh.VertexGen(VOCAB, d=args.d_model, start_id=START).to(device)
     pmodel = ph.PointerFaceModel(d_model=args.d_model).to(device)
     gmodel = gh.GeomHeadModel(d_model=args.d_model).to(device)
-    train_head('S1', vmodel, vh.run_epoch, ex_v, train_ids, val_ids, args.ep1,
-               args.batch, 5e-4, device, rng, extra=(START,))
-    train_head('S2', pmodel, tp.run_epoch, ex_p, train_ids, val_ids, args.ep2,
-               args.batch, 5e-4, device, rng)
-    train_head('S3', gmodel, gh.run_epoch, ex_g, train_ids, val_ids, args.ep3,
-               args.batch, 5e-4, device, rng)
+
+    if args.load_dir:
+        meta = torch.load(f"{args.load_dir}/meta.pt", weights_only=False)
+        assert meta['d_model'] == args.d_model, \
+            f"d_model mismatch: ckpt {meta['d_model']} != --d-model {args.d_model}"
+        vmodel.load_state_dict(torch.load(f"{args.load_dir}/s1_vertex.pt", map_location=device))
+        pmodel.load_state_dict(torch.load(f"{args.load_dir}/s2_pointer.pt", map_location=device))
+        gmodel.load_state_dict(torch.load(f"{args.load_dir}/s3_geom.pt", map_location=device))
+        print(f"== 3 Koepfe geladen aus {args.load_dir} (Training uebersprungen) ==")
+    else:
+        print("== Training 3 Koepfe ==")
+        train_head('S1', vmodel, vh.run_epoch, ex_v, train_ids, val_ids, args.ep1,
+                   args.batch, 5e-4, device, rng, extra=(START,))
+        train_head('S2', pmodel, tp.run_epoch, ex_p, train_ids, val_ids, args.ep2,
+                   args.batch, 5e-4, device, rng)
+        train_head('S3', gmodel, gh.run_epoch, ex_g, train_ids, val_ids, args.ep3,
+                   args.batch, 5e-4, device, rng)
+        if args.save_dir:
+            os.makedirs(args.save_dir, exist_ok=True)
+            torch.save(vmodel.state_dict(), f"{args.save_dir}/s1_vertex.pt")
+            torch.save(pmodel.state_dict(), f"{args.save_dir}/s2_pointer.pt")
+            torch.save(gmodel.state_dict(), f"{args.save_dir}/s3_geom.pt")
+            torch.save({'d_model': args.d_model, 'vocab': VOCAB, 'start': START,
+                        'data': args.data, 'seed': args.seed}, f"{args.save_dir}/meta.pt")
+            print(f"== 3 Koepfe gespeichert -> {args.save_dir}/ ==")
 
     print("== Chain-Inferenz auf held-out ==")
     vmodel.eval(); pmodel.eval(); gmodel.eval()

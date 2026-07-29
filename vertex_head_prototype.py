@@ -202,6 +202,7 @@ def main():
     ap.add_argument('--ve-n', type=int, default=80)
     ap.add_argument('--limit', type=int, default=None)
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--save', default=None, help='Modell + Meta hier speichern (.pt)')
     args = ap.parse_args()
 
     torch.manual_seed(args.seed); np.random.seed(args.seed)
@@ -261,6 +262,12 @@ def main():
               f"val-loss {vll:.4f} val-tokacc {vla:.3f}  {ves}  "
               f"lr {sched.get_last_lr()[0]:.1e} peakVRAM {vram:.2f}GB")
     print(f"\nfertig in {time.time()-tg:.0f}s.")
+
+    if args.save:
+        torch.save({'model': model.state_dict(), 'd_model': args.d_model,
+                    'n_enc': args.n_enc, 'n_dec': args.n_dec, 'vocab': vocab,
+                    'start': START, 'kind': 'vertex'}, args.save)
+        print("gespeichert ->", args.save)
 
 
 if __name__ == '__main__':

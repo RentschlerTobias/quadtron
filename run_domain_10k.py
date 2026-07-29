@@ -27,6 +27,10 @@ def main():
     ap.add_argument("--n-sample-points", type=int, default=768)
     ap.add_argument("--n-heads", type=int, default=8)
     ap.add_argument("--stage-layers", type=int, nargs="+", default=[2, 4, 6, 8, 10])
+    ap.add_argument("--sorting-strategy", type=int, default=0,
+                    help="0=row-structured (keine Kompr.), 1=row-compressed, 2=vertex-first")
+    ap.add_argument("--no-point-labels", action="store_true",
+                    help="Punktwolken-Label-Konditionierung AUS (alter Zustand, zum Vergleich)")
     ap.add_argument("--log-dir", default="runs_domain")
     args = ap.parse_args()
 
@@ -40,9 +44,12 @@ def main():
         stage_layers=tuple(args.stage_layers),
         learning_rate=args.lr,
         n_sample_points=args.n_sample_points,
+        sorting_strategy=args.sorting_strategy,
+        point_cloud_labels=not args.no_point_labels,
         log_dir=args.log_dir,
         save_best=True,
     )
+    print(f"sorting_strategy={cfg.sorting_strategy}  point_cloud_labels={cfg.point_cloud_labels}")
     print("Config-Hash:", cfg.hash())
     trainer = DomainTrainer(cfg)
     print("vocab:", trainer.tokenizer.vocab_size,

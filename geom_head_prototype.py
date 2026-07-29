@@ -195,6 +195,7 @@ def main():
     ap.add_argument('--ce-n', type=int, default=60, help='Kurven-Eval Stichprobe')
     ap.add_argument('--limit', type=int, default=None)
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--save', default=None, help='Modell + Meta hier speichern (.pt)')
     args = ap.parse_args()
 
     torch.manual_seed(args.seed); np.random.seed(args.seed)
@@ -251,6 +252,12 @@ def main():
         print(f"ep {ep:3d}  tr-l1 {tr:.5f}  val-l1 {vl:.5f}  {ces}  "
               f"lr {sched.get_last_lr()[0]:.1e} peakVRAM {vram:.2f}GB")
     print(f"\nfertig in {time.time()-tg:.0f}s.")
+
+    if args.save:
+        torch.save({'model': model.state_dict(), 'd_model': args.d_model,
+                    'n_enc': args.n_enc, 'n_edge': args.n_edge, 'kind': 'geom'},
+                   args.save)
+        print("gespeichert ->", args.save)
 
 
 if __name__ == '__main__':

@@ -110,6 +110,7 @@ def main():
     ap.add_argument('--fr-n', type=int, default=60, help='Free-Run Stichprobe')
     ap.add_argument('--limit', type=int, default=None, help='nur erste K Meshes')
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--save', default=None, help='Modell + Meta hier speichern (.pt)')
     args = ap.parse_args()
 
     torch.manual_seed(args.seed); np.random.seed(args.seed)
@@ -168,6 +169,12 @@ def main():
               f"val-loss {vl_loss:.4f} val-tf-acc {vl_acc:.3f}  {frs}  "
               f"lr {sched.get_last_lr()[0]:.1e} peakVRAM {vram:.2f}GB")
     print(f"\nfertig in {time.time()-tglob:.0f}s.")
+
+    if args.save:
+        torch.save({'model': model.state_dict(), 'd_model': args.d_model,
+                    'n_enc': args.n_enc, 'n_dec': args.n_dec, 'kind': 'pointer'},
+                   args.save)
+        print("gespeichert ->", args.save)
 
 
 if __name__ == '__main__':
