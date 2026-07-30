@@ -143,6 +143,8 @@ def main():
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--save-dir', default=None, help='3 Koepfe nach Training hier speichern')
     ap.add_argument('--load-dir', default=None, help='3 Koepfe laden, Training ueberspringen')
+    ap.add_argument('--load-s1', default=None,
+                    help='vortrainiertes S1 (vertex_head-Format) laden, nur S2+S3 trainieren')
     ap.add_argument('--out', default='figures/e2e/e2e_gallery.png')
     args = ap.parse_args()
 
@@ -187,9 +189,16 @@ def main():
         gmodel.load_state_dict(torch.load(f"{args.load_dir}/s3_geom.pt", map_location=device))
         print(f"== 3 Koepfe geladen aus {args.load_dir} (Training uebersprungen) ==")
     else:
-        print("== Training 3 Koepfe ==")
-        train_head('S1', vmodel, vh.run_epoch, ex_v, train_ids, val_ids, args.ep1,
-                   args.batch, 5e-4, device, rng, extra=(START, PAD))
+        if args.load_s1:
+            ck = torch.load(args.load_s1, weights_only=False, map_location=device)
+            assert ck['d_model'] == args.d_model, \
+                f"S1 d_model {ck['d_model']} != --d-model {args.d_model}"
+            vmodel.load_state_dict(ck['model'])
+            print(f"== S1 geladen aus {args.load_s1} (ep{ck.get('epoch')}), trainiere nur S2+S3 ==")
+        else:
+            print("== Training 3 Koepfe ==")
+            train_head('S1', vmodel, vh.run_epoch, ex_v, train_ids, val_ids, args.ep1,
+                       args.batch, 5e-4, device, rng, extra=(START, PAD))
         train_head('S2', pmodel, tp.run_epoch, ex_p, train_ids, val_ids, args.ep2,
                    args.batch, 5e-4, device, rng)
         train_head('S3', gmodel, gh.run_epoch, ex_g, train_ids, val_ids, args.ep3,
