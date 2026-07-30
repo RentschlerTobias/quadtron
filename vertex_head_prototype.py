@@ -21,6 +21,7 @@ zusaetzliches Memory-Token an die Punkt-Latents konkateniert (Meshtron-Muster).
 
 import argparse
 import math
+import os
 import time
 import numpy as np
 import torch
@@ -306,9 +307,18 @@ def main():
         opt, lambda s: (s + 1) / warm if s < warm else
         0.5 * (1 + math.cos(math.pi * (s - warm) / max(1, total - warm))))
 
+    def save_ckpt(tag_ep, tag_val):
+        os.makedirs(os.path.dirname(args.save) or '.', exist_ok=True)
+        torch.save({'model': model.state_dict(), 'd_model': args.d_model,
+                    'n_enc': args.n_enc, 'n_dec': args.n_dec, 'vocab': vocab,
+                    'start': START, 'stop': STOP, 'pad': PAD, 'max_len': max_len,
+                    'facecounts': FACECOUNTS, 'kind': 'vertex',
+                    'epoch': tag_ep, 'val_loss': tag_val}, args.save)
+
     if device == 'cuda':
         torch.cuda.reset_peak_memory_stats()
     ve_ids = val_ids[:min(args.ve_n, len(val_ids))]
+    best_val = float('inf'); best_ep = 0
     tg = time.time()
     for ep in range(1, args.epochs + 1):
         trl, tra = run_epoch(model, rng.permutation(train_ids), examples, args.batch,
@@ -317,21 +327,19 @@ def main():
         vll, vla = run_epoch(model, val_ids, examples, args.batch, None, None, 0,
                              device, START, PAD, train=False)
         vram = torch.cuda.max_memory_allocated() / 1e9 if device == 'cuda' else 0
+        best = ""
+        if args.save and vll < best_val:                 # bestes Modell speichern
+            best_val = vll; best_ep = ep; save_ckpt(ep, vll); best = "  *best*"
         line = (f"ep {ep:3d}  tr-loss {trl:.4f} tr-acc {tra:.3f}  |  "
                 f"val-loss {vll:.4f} val-acc {vla:.3f}  lr {sched.get_last_lr()[0]:.1e} "
-                f"peakVRAM {vram:.2f}GB")
+                f"peakVRAM {vram:.2f}GB{best}")
         if ep % args.ve_every == 0 or ep == args.epochs:
             per = vertex_eval(model, examples, ve_ids, device, tok, START, STOP)
             line += "\n     " + fmt_eval(per)
         print(line)
     print(f"\nfertig in {time.time()-tg:.0f}s.")
-
     if args.save:
-        torch.save({'model': model.state_dict(), 'd_model': args.d_model,
-                    'n_enc': args.n_enc, 'n_dec': args.n_dec, 'vocab': vocab,
-                    'start': START, 'stop': STOP, 'pad': PAD, 'max_len': max_len,
-                    'facecounts': FACECOUNTS, 'kind': 'vertex'}, args.save)
-        print("gespeichert ->", args.save)
+        print(f"bestes Modell (ep{best_ep}, val-loss {best_val:.4f}) -> {args.save}")
 
 
 if __name__ == '__main__':

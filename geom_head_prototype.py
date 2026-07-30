@@ -21,6 +21,7 @@ Streamline (max-dist / Chord), vergleichbar mit dem Fit-Floor (Targets selbst).
 
 import argparse
 import math
+import os
 import time
 import numpy as np
 import torch
@@ -244,12 +245,21 @@ def main():
         torch.cuda.reset_peak_memory_stats()
     ce_ids = val_ids[:min(args.ce_n, len(val_ids))]
     tg = time.time()
+    best_val = float('inf'); best_ep = 0
     for ep in range(1, args.epochs + 1):
         tr = run_epoch(model, rng.permutation(train_ids), examples, args.batch,
                        opt, sched, args.clip, device, train=True, progress=True, epoch=ep)
         vl = run_epoch(model, val_ids, examples, args.batch, None, None, 0,
                        device, train=False)
         vram = torch.cuda.max_memory_allocated() / 1e9 if device == 'cuda' else 0
+        best = ""
+        if args.save and vl < best_val:                 # bestes Modell speichern
+            best_val = vl; best_ep = ep
+            os.makedirs(os.path.dirname(args.save) or '.', exist_ok=True)
+            torch.save({'model': model.state_dict(), 'd_model': args.d_model,
+                        'n_enc': args.n_enc, 'n_edge': args.n_edge, 'kind': 'geom',
+                        'epoch': ep, 'val_l1': vl}, args.save)
+            best = "  *best*"
         if ep % args.ce_every == 0 or ep == args.epochs:
             em, ef = curve_eval(model, examples, ce_ids, device)
             ces = (f"curve-err%(model) med {100*np.median(em):.2f} p90 {100*np.percentile(em,90):.2f}"
@@ -257,14 +267,10 @@ def main():
         else:
             ces = "curve-err% -"
         print(f"ep {ep:3d}  tr-l1 {tr:.5f}  val-l1 {vl:.5f}  {ces}  "
-              f"lr {sched.get_last_lr()[0]:.1e} peakVRAM {vram:.2f}GB")
+              f"lr {sched.get_last_lr()[0]:.1e} peakVRAM {vram:.2f}GB{best}")
     print(f"\nfertig in {time.time()-tg:.0f}s.")
-
     if args.save:
-        torch.save({'model': model.state_dict(), 'd_model': args.d_model,
-                    'n_enc': args.n_enc, 'n_edge': args.n_edge, 'kind': 'geom'},
-                   args.save)
-        print("gespeichert ->", args.save)
+        print(f"bestes Modell (ep{best_ep}, val-l1 {best_val:.5f}) -> {args.save}")
 
 
 if __name__ == '__main__':

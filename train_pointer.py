@@ -19,6 +19,7 @@ Padding-Schema:
 
 import argparse
 import math
+import os
 import time
 import numpy as np
 import torch
@@ -161,6 +162,7 @@ def main():
         torch.cuda.reset_peak_memory_stats()
     fr_ids = val_ids[:min(args.fr_n, len(val_ids))]
     tglob = time.time()
+    best_val = float('inf'); best_ep = 0
     for ep in range(1, args.epochs + 1):
         tr_ids = rng.permutation(train_ids)
         tr_loss, tr_acc = run_epoch(model, tr_ids, examples, args.batch, opt, sched,
@@ -168,6 +170,14 @@ def main():
         vl_loss, vl_acc = run_epoch(model, val_ids, examples, args.batch, None, None,
                                     0, device, train=False)
         vram = torch.cuda.max_memory_allocated() / 1e9 if device == 'cuda' else 0
+        best = ""
+        if args.save and vl_loss < best_val:            # bestes Modell speichern
+            best_val = vl_loss; best_ep = ep
+            os.makedirs(os.path.dirname(args.save) or '.', exist_ok=True)
+            torch.save({'model': model.state_dict(), 'd_model': args.d_model,
+                        'n_enc': args.n_enc, 'n_dec': args.n_dec, 'kind': 'pointer',
+                        'epoch': ep, 'val_loss': vl_loss}, args.save)
+            best = "  *best*"
         if ep % args.fr_every == 0 or ep == args.epochs:
             fe, qd = free_run_eval(model, examples, fr_ids, device)
             frs = f"val-face-exact {fe:.3f} quads-distinct {qd:.3f}"
@@ -175,14 +185,10 @@ def main():
             frs = "val-face-exact -     quads-distinct -"
         print(f"ep {ep:3d}  tr-loss {tr_loss:.4f} tr-acc {tr_acc:.3f}  |  "
               f"val-loss {vl_loss:.4f} val-tf-acc {vl_acc:.3f}  {frs}  "
-              f"lr {sched.get_last_lr()[0]:.1e} peakVRAM {vram:.2f}GB")
+              f"lr {sched.get_last_lr()[0]:.1e} peakVRAM {vram:.2f}GB{best}")
     print(f"\nfertig in {time.time()-tglob:.0f}s.")
-
     if args.save:
-        torch.save({'model': model.state_dict(), 'd_model': args.d_model,
-                    'n_enc': args.n_enc, 'n_dec': args.n_dec, 'kind': 'pointer'},
-                   args.save)
-        print("gespeichert ->", args.save)
+        print(f"bestes Modell (ep{best_ep}, val-loss {best_val:.4f}) -> {args.save}")
 
 
 if __name__ == '__main__':
