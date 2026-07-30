@@ -26,6 +26,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 
 from prototype_twostage import TwoStageTokenizer
 
@@ -118,12 +119,16 @@ def collate(batch):
     return vf, e_new, tgt, vpad, epad
 
 
-def run_epoch(model, order, examples, bs, opt, sched, clip, device, train=True):
+def run_epoch(model, order, examples, bs, opt, sched, clip, device, train=True,
+              progress=False, epoch=0):
     model.train() if train else model.eval()
     tot = cnt = 0.0
     ctx = torch.enable_grad() if train else torch.no_grad()
+    steps = range(0, len(order), bs)
+    bar = tqdm(steps, desc=f"ep{epoch} {'train' if train else 'val'}", unit="batch",
+               leave=False, dynamic_ncols=True) if progress else steps
     with ctx:
-        for s in range(0, len(order), bs):
+        for s in bar:
             batch = [examples[i] for i in order[s:s + bs]]
             vf, e_new, tgt, vpad, epad = collate(batch)
             vf, e_new, tgt = vf.to(device), e_new.to(device), tgt.to(device)
@@ -138,6 +143,8 @@ def run_epoch(model, order, examples, bs, opt, sched, clip, device, train=True):
                 opt.step(); sched.step()
             n = int(m.sum())
             tot += loss.item() * n; cnt += n
+            if progress:
+                bar.set_postfix(l1=f"{tot/max(cnt,1):.5f}")
     return tot / max(cnt, 1)
 
 
@@ -239,7 +246,7 @@ def main():
     tg = time.time()
     for ep in range(1, args.epochs + 1):
         tr = run_epoch(model, rng.permutation(train_ids), examples, args.batch,
-                       opt, sched, args.clip, device, train=True)
+                       opt, sched, args.clip, device, train=True, progress=True, epoch=ep)
         vl = run_epoch(model, val_ids, examples, args.batch, None, None, 0,
                        device, train=False)
         vram = torch.cuda.max_memory_allocated() / 1e9 if device == 'cuda' else 0

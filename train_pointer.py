@@ -24,6 +24,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 
 from prototype_twostage import TwoStageTokenizer
 from pointer_head_prototype import PointerFaceModel, build_examples
@@ -49,12 +50,16 @@ def collate(batch):
     return vf, vpad, ptr, tpad, faces
 
 
-def run_epoch(model, order, examples, bs, opt, sched, clip, device, train=True):
+def run_epoch(model, order, examples, bs, opt, sched, clip, device, train=True,
+              progress=False, epoch=0):
     model.train() if train else model.eval()
     tot_loss = tot_tok = tf_correct = 0.0
     ctx = torch.enable_grad() if train else torch.no_grad()
+    steps = range(0, len(order), bs)
+    bar = tqdm(steps, desc=f"ep{epoch} {'train' if train else 'val'}", unit="batch",
+               leave=False, dynamic_ncols=True) if progress else steps
     with ctx:
-        for s in range(0, len(order), bs):
+        for s in bar:
             batch = [examples[i] for i in order[s:s + bs]]
             vf, vpad, ptr, tpad, _ = collate(batch)
             vf, vpad, ptr, tpad = vf.to(device), vpad.to(device), ptr.to(device), tpad.to(device)
@@ -73,6 +78,9 @@ def run_epoch(model, order, examples, bs, opt, sched, clip, device, train=True):
                 tf_correct += float((pred[m] == ptr[m]).sum())
                 ntok = int(m.sum())
                 tot_loss += loss.item() * ntok; tot_tok += ntok
+            if progress:
+                bar.set_postfix(loss=f"{tot_loss/max(tot_tok,1):.3f}",
+                                acc=f"{tf_correct/max(tot_tok,1):.3f}")
     return tot_loss / tot_tok, tf_correct / tot_tok
 
 
@@ -156,7 +164,7 @@ def main():
     for ep in range(1, args.epochs + 1):
         tr_ids = rng.permutation(train_ids)
         tr_loss, tr_acc = run_epoch(model, tr_ids, examples, args.batch, opt, sched,
-                                    args.clip, device, train=True)
+                                    args.clip, device, train=True, progress=True, epoch=ep)
         vl_loss, vl_acc = run_epoch(model, val_ids, examples, args.batch, None, None,
                                     0, device, train=False)
         vram = torch.cuda.max_memory_allocated() / 1e9 if device == 'cuda' else 0
