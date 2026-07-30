@@ -56,30 +56,8 @@ def train_head(name, model, run_epoch, examples, train_ids, val_ids, epochs, bs,
 
 
 # ---- Chain-Inferenz-Bausteine ----------------------------------------
-@torch.no_grad()
-def s1_generate(model, pts, tok, START, device):
-    """Punktwolke -> 12 Vertices (polar r,theta in kanonischer Reihenfolge)."""
-    Qr, Qa = tok.Qr, tok.Qa; STOP = Qr + 2 * Qa + 1
-    pts = pts.unsqueeze(0).to(device)
-    ppad = torch.zeros(1, pts.size(1), dtype=torch.bool, device=device)
-    mem = model.encode(pts, ppad)
-    seq = [START]
-    for step in range(36):
-        din = torch.tensor(seq, device=device)[None]
-        logits = model.decode(mem, ppad, din)[0, -1]
-        logits = vh.group_mask(logits, step, Qr, Qa, STOP)
-        seq.append(int(logits.argmax()))
-    gen = seq[1:]
-    polar = []
-    for m in range(12):
-        r = tok._dq_scalar(gen[3 * m], tok.R_MIN, tok.R_MAX)
-        th = tok._dq_angle(gen[3 * m + 1] - Qr, gen[3 * m + 2] - (Qr + Qa))
-        polar.append((r, th))
-    return np.array(polar)                                    # [12,2] (r,theta)
-
-
 def faces_to_edges(faces_new):
-    """[6,4] -> [24,2] gerichtete Half-Edges (Face-Traversal)."""
+    """[F,4] -> [4F,2] gerichtete Half-Edges (Face-Traversal)."""
     e = []
     for f in faces_new:
         for k in range(4):
@@ -88,17 +66,22 @@ def faces_to_edges(faces_new):
 
 
 @torch.no_grad()
-def chain_one(vmodel, pmodel, gmodel, pts, tok, START, device):
-    """Volle Kette. Returns cart[12,2], faces_new[6,4], edge_curves dict (a,b)->[n,2]."""
-    polar = s1_generate(vmodel, pts, tok, START, device)
+def chain_one(vmodel, pmodel, gmodel, pts, n, tok, START, STOP, device):
+    """Volle Kette bei Aufloesung n (F = 6 n^2 explizit). Returns cart[Mgen,2],
+    faces_new[F,4], edge_curves dict (a,b)->[.,2]. faces_new kann leer sein, falls
+    S1 zu wenige Vertices erzeugt (Mgen < 4)."""
+    polar = vh.s1_generate(vmodel, pts, n, tok, START, STOP, device)  # [Mgen,2]
     r, th = polar[:, 0], polar[:, 1]
     vert_feats = torch.tensor(np.stack([r, np.sin(th), np.cos(th)], 1),
-                              dtype=torch.float32)             # [12,3]
-    cart = np.stack([r * np.cos(th), r * np.sin(th)], 1)       # [12,2] (um center)
+                              dtype=torch.float32)             # [Mgen,3]
+    cart = np.stack([r * np.cos(th), r * np.sin(th)], 1)       # [Mgen,2] (um center)
 
+    Fexp = 6 * n * n                                          # Face-Zahl EXPLIZIT
+    if polar.shape[0] < 4:                                    # zu wenig -> leer
+        return cart, np.zeros((0, 4), dtype=np.int64), {}
     vf = vert_feats.unsqueeze(0).to(device)
-    ptrs = pmodel.generate(vf, 24)                            # 24 Zeiger
-    faces_new = np.array(ptrs, dtype=np.int64).reshape(6, 4)
+    ptrs = pmodel.generate(vf, 4 * Fexp)                     # 4F Zeiger (explizit)
+    faces_new = np.array(ptrs, dtype=np.int64).reshape(Fexp, 4)
 
     e_new = faces_to_edges(faces_new)
     en = torch.tensor(e_new, device=device).unsqueeze(0)
@@ -166,18 +149,23 @@ def main():
     torch.manual_seed(args.seed); np.random.seed(args.seed)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     tok = TwoStageTokenizer(repr_mode='cubic_bezier')
-    Qr, Qa = tok.Qr, tok.Qa; START = Qr + 2 * Qa; VOCAB = Qr + 2 * Qa + 2
+    Qr, Qa = tok.Qr, tok.Qa
+    START = Qr + 2 * Qa; STOP = Qr + 2 * Qa + 1; PAD = Qr + 2 * Qa + 2
+    VOCAB = Qr + 2 * Qa + 3
 
     print(f"Lade {args.data} ...")
     data = torch.load(args.data, weights_only=False)
-    six = [d for d in data if d['faces'].shape[1] == 6]
+    six = [d for d in data if d['faces'].shape[1] in vh.FC2N]   # alle Facecounts
     if args.limit:
         six = six[:args.limit]
-    print(f"6F-Meshes: {len(six)}  |  baue Beispiele (S1/S2/S3, index-aligned) ...")
+    from collections import Counter
+    print(f"Meshes: {len(six)}  facecounts {dict(sorted(Counter(d['faces'].shape[1] for d in six).items()))}"
+          f"  |  baue Beispiele (S1/S2/S3, index-aligned) ...")
     t0 = time.time()
     ex_v = vh.build_vertex_examples(six, tok)
     ex_p = ph.build_examples(six, tok)
     ex_g = gh.build_geom_examples(six, tok)
+    max_len = max(e['seq'].numel() for e in ex_v) + 1
     print(f"  Beispiele in {time.time()-t0:.0f}s")
 
     rng = np.random.default_rng(args.seed)
@@ -186,7 +174,7 @@ def main():
     val_ids = perm[:n_val]; train_ids = perm[n_val:]
     print(f"split: {len(train_ids)} train / {len(val_ids)} val")
 
-    vmodel = vh.VertexGen(VOCAB, d=args.d_model, start_id=START).to(device)
+    vmodel = vh.VertexGen(VOCAB, d=args.d_model, max_len=max_len, start_id=START).to(device)
     pmodel = ph.PointerFaceModel(d_model=args.d_model).to(device)
     gmodel = gh.GeomHeadModel(d_model=args.d_model).to(device)
 
@@ -201,7 +189,7 @@ def main():
     else:
         print("== Training 3 Koepfe ==")
         train_head('S1', vmodel, vh.run_epoch, ex_v, train_ids, val_ids, args.ep1,
-                   args.batch, 5e-4, device, rng, extra=(START,))
+                   args.batch, 5e-4, device, rng, extra=(START, PAD))
         train_head('S2', pmodel, tp.run_epoch, ex_p, train_ids, val_ids, args.ep2,
                    args.batch, 5e-4, device, rng)
         train_head('S3', gmodel, gh.run_epoch, ex_g, train_ids, val_ids, args.ep3,
@@ -212,68 +200,76 @@ def main():
             torch.save(pmodel.state_dict(), f"{args.save_dir}/s2_pointer.pt")
             torch.save(gmodel.state_dict(), f"{args.save_dir}/s3_geom.pt")
             torch.save({'d_model': args.d_model, 'vocab': VOCAB, 'start': START,
+                        'stop': STOP, 'pad': PAD, 'max_len': max_len,
                         'data': args.data, 'seed': args.seed}, f"{args.save_dir}/meta.pt")
             print(f"== 3 Koepfe gespeichert -> {args.save_dir}/ ==")
 
-    print("== Chain-Inferenz auf held-out ==")
+    print("== Chain-Inferenz auf held-out (je Facecount) ==")
     vmodel.eval(); pmodel.eval(); gmodel.eval()
     ev_ids = val_ids[:min(args.eval_n, len(val_ids))]
-    vert_errs, face_exact, quads_distinct, curve_errs = [], 0, 0, []
-    n_faces = 0
+    B = {f: {'n': 0, 'count_ok': 0, 'verr': [], 'fex': 0, 'nf': 0, 'qd': 0, 'cerr': []}
+         for f in vh.FACECOUNTS}
     for i in ev_ids:
-        d = six[i]
+        d = six[i]; fc = ex_v[i]['fc']; nlvl = ex_v[i]['n']; b = B[fc]
         cart, faces_new, curves = chain_one(vmodel, pmodel, gmodel, ex_v[i]['pts'],
-                                            tok, START, device)
-        center = d['center'].numpy()
-        # S1 Vertex-Fehler (generiert vs GT, index-weise, /Diag)
-        gt_vc = ex_v[i]['vc']
-        vert_errs.append(np.linalg.norm(cart + center - gt_vc, axis=1) / math.sqrt(2))
-        # S2 Face-Exaktheit (generierte Topologie vs GT) + Quads-distinct
-        gt_faces = ex_p[i][2]                                 # [6,4] GT faces_new
+                                            nlvl, tok, START, STOP, device)
+        center = d['center'].numpy(); gt_vc = ex_v[i]['vc']
+        b['n'] += 1
+        if cart.shape[0] != gt_vc.shape[0]:      # falsche Vertexzahl -> Kette bricht
+            continue
+        b['count_ok'] += 1
+        b['verr'].append(np.linalg.norm(cart + center - gt_vc, axis=1) / math.sqrt(2))
+        gt_faces = ex_p[i][2]
         for gi, fi in zip(faces_new, gt_faces):
-            n_faces += 1
+            b['nf'] += 1
             if np.array_equal(gi, fi):
-                face_exact += 1
+                b['fex'] += 1
             if len(set(gi.tolist())) == 4:
-                quads_distinct += 1
-        # S3 Kurvenfehler NUR wo Topologie exakt (Kanten korrespondieren zu GT)
-        e2s = d['edge_to_streamline']; e_glob = ex_g[i]['e_glob']; gcart = ex_g[i]['cart']
-        e_new = faces_to_edges(faces_new)
-        for j, (a, b) in enumerate(e_new):
-            if not np.array_equal(faces_new, gt_faces):
-                continue
-            p0, p1 = int(e_glob[j, 0]), int(e_glob[j, 1])
-            pts = e2s.get((p0, p1))
-            if pts is None:
-                continue
-            pts = np.asarray(pts, float)
-            cur = curves[(a, b)] + center[None]
-            chord = np.linalg.norm(gcart[p1] - gcart[p0]) + 1e-9
-            dd = np.linalg.norm(pts[:, None, :] - cur[None, :, :], axis=2).min(1)
-            curve_errs.append(float(dd.max() / chord))
+                b['qd'] += 1
+        if np.array_equal(faces_new, gt_faces):  # Topologie exakt -> Kurvenfehler
+            e2s = d['edge_to_streamline']; e_glob = ex_g[i]['e_glob']; gcart = ex_g[i]['cart']
+            for j, (a, bb) in enumerate(faces_to_edges(faces_new)):
+                p0, p1 = int(e_glob[j, 0]), int(e_glob[j, 1])
+                pts = e2s.get((p0, p1))
+                if pts is None:
+                    continue
+                pts = np.asarray(pts, float); cur = curves[(a, bb)] + center[None]
+                chord = np.linalg.norm(gcart[p1] - gcart[p0]) + 1e-9
+                dd = np.linalg.norm(pts[:, None, :] - cur[None, :, :], axis=2).min(1)
+                b['cerr'].append(float(dd.max() / chord))
 
-    ve = np.concatenate(vert_errs)
-    print(f"\n== E2E-Ergebnis ({len(ev_ids)} held-out Meshes) ==")
-    print(f"S1 vert-err%(diag):   med {100*np.median(ve):.2f}  p90 {100*np.percentile(ve,90):.2f}")
-    print(f"S2 face-exact:        {face_exact/n_faces:.3f}  ({face_exact}/{n_faces})")
-    print(f"S2 quads-distinct:    {quads_distinct/n_faces:.3f}")
-    if curve_errs:
-        ce = np.array(curve_errs)
-        print(f"S3 curve-err% (top-exakt): med {100*np.median(ce):.2f}  p90 {100*np.percentile(ce,90):.2f}")
+    print(f"\n== E2E-Ergebnis ({len(ev_ids)} held-out) ==")
+    for f in vh.FACECOUNTS:
+        b = B[f]
+        if b['n'] == 0:
+            continue
+        co = b['count_ok'] / b['n']
+        vs = f"vert-err% med {100*np.median(np.concatenate(b['verr'])):.2f}" if b['verr'] else "vert-err -"
+        fx = f"face-exact {b['fex']/b['nf']:.3f}" if b['nf'] else "face-exact -"
+        qd = f"quads-dist {b['qd']/b['nf']:.3f}" if b['nf'] else ""
+        cs = f"curve% med {100*np.median(b['cerr']):.2f}" if b['cerr'] else "curve -"
+        print(f"  {f:3d}F (n={vh.FC2N[f]}): count-ok {co:.2f}  {vs}  {fx}  {qd}  {cs}  (N={b['n']})")
 
-    # Galerie
+    # Galerie: je Facecount ein Beispiel
     print("== Galerie ==")
-    gids = ev_ids[:args.gallery]
+    gids = []
+    for f in vh.FACECOUNTS:
+        cand = [i for i in ev_ids if ex_v[i]['fc'] == f]
+        gids += cand[:max(1, args.gallery // 4)]
+    gids = gids[:args.gallery] or list(ev_ids[:args.gallery])
     fig, axes = plt.subplots(2, len(gids), figsize=(3 * len(gids), 6))
+    axes = np.atleast_2d(axes)
     for c, i in enumerate(gids):
-        d = six[i]
+        d = six[i]; nlvl = ex_v[i]['n']
         cart, faces_new, curves = chain_one(vmodel, pmodel, gmodel, ex_v[i]['pts'],
-                                            tok, START, device)
-        draw_gt(axes[0, c], d); axes[0, c].set_title(f"GT #{i}", fontsize=9)
-        draw_gen(axes[1, c], cart, d['center'].numpy(), faces_new, curves)
-        axes[1, c].set_title("E2E generiert", fontsize=9)
+                                            nlvl, tok, START, STOP, device)
+        draw_gt(axes[0, c], d); axes[0, c].set_title(f"GT {ex_v[i]['fc']}F", fontsize=9)
+        if faces_new.shape[0] > 0:
+            draw_gen(axes[1, c], cart, d['center'].numpy(), faces_new, curves)
+        axes[1, c].set_title(f"gen {faces_new.shape[0]}F", fontsize=9)
+        axes[1, c].set_aspect('equal'); axes[1, c].axis('off')
     axes[0, 0].set_ylabel("GT", fontsize=11); axes[1, 0].set_ylabel("generiert", fontsize=11)
-    fig.suptitle("Plan B end-to-end: Punktwolke -> S1 Vertices -> S2 Faces -> S3 Geometrie",
+    fig.suptitle("Plan B end-to-end (variabler Facecount): Punktwolke + n -> Mesh",
                  fontsize=12)
     fig.tight_layout()
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
