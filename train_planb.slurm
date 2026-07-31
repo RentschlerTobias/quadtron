@@ -23,6 +23,7 @@
 # Setup (einmalig, auf der LOGIN-Node -- hat Internet):
 #   ws_allocate meshtron 60           # falls noch kein Workspace
 #   cd $(ws_find meshtron)/meshtron   # Repo im Workspace (grosse Daten dorthin!)
+#   export UV_CACHE_DIR=$PWD/.uv-cache  # Cache auf /work (Hardlinks, kein $HOME)
 #   uv sync                           # baut .venv aus pyproject.toml + uv.lock
 #
 # Aufruf:
@@ -53,6 +54,9 @@ mkdir -p slurm_logs
 # EMPFEHLUNG: `uv sync` EINMAL auf der LOGIN-Node laufen lassen (hat Internet;
 # Compute-Node evtl. nicht). Der Block unten ist nur Fallback.
 ENV_PATH=${ENV_PATH:-$PWD/.venv}
+# uv-Cache auf dasselbe FS wie .venv (Workspace/work) -> Hardlinks statt Copy,
+# schnell + schont $HOME-Quota. Behebt "Failed to hardlink"-Warnung.
+export UV_CACHE_DIR="${UV_CACHE_DIR:-$PWD/.uv-cache}"
 if [[ ! -f "${ENV_PATH}/bin/activate" ]]; then
   echo "kein venv unter ${ENV_PATH} -> versuche 'uv sync' ..."
   if ! command -v uv >/dev/null 2>&1; then

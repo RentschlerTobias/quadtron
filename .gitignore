@@ -13,3 +13,4 @@ figures/
 *.tar.zst
 quad_domain_data/
 .venv/
+.uv-cache/
