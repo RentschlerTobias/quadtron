@@ -20,12 +20,15 @@
 #   Fuer VOLLES S1-Training: Partition wechseln ->
 #         sbatch --partition=gpu_a100_il --time=08:00:00 train_planb.slurm
 #
-# Aufruf:
-#   ws_allocate meshtron 60           # einmalig, falls noch kein Workspace
+# Setup (einmalig, auf der LOGIN-Node -- hat Internet):
+#   ws_allocate meshtron 60           # falls noch kein Workspace
 #   cd $(ws_find meshtron)/meshtron   # Repo im Workspace (grosse Daten dorthin!)
+#   uv sync                           # baut .venv aus pyproject.toml + uv.lock
+#
+# Aufruf:
 #   sbatch train_planb.slurm
 #   LOAD_S1=runs_planb/s1_var.pt BATCH=128 sbatch train_planb.slurm
-#   ENV_PATH=$(ws_find meshtron)/venvs/meshtron sbatch train_planb.slurm
+#   ENV_PATH=/eigenes/venv sbatch train_planb.slurm   # anderes venv erzwingen
 #
 # Logs -> slurm_logs/planb_<jobid>.{out,err}
 # Ergebnis -> ${SAVE_DIR}/{s1,s2,s3}.pt  +  ${OUT} (Galerie-PNG)
@@ -44,12 +47,22 @@ set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 mkdir -p slurm_logs
 
-# --- Environment ------------------------------------------------------------
+# --- Environment: uv-managed .venv (aus pyproject.toml + uv.lock) ------------
 # torch cu128 wheels bringen CUDA-Runtime mit -> nur NVIDIA-Treiber noetig (auf
-# GPU-Knoten vorhanden). Falls venv-Erstellung ein Modul braucht, hier laden:
-##  module load devel/python/3.12
-##  module load devel/cuda/12.8
-ENV_PATH=${ENV_PATH:-$HOME/Environments/meshtron}
+# GPU-Knoten vorhanden), kein cuda-Modul. uv holt auch Python 3.12 selbst.
+# EMPFEHLUNG: `uv sync` EINMAL auf der LOGIN-Node laufen lassen (hat Internet;
+# Compute-Node evtl. nicht). Der Block unten ist nur Fallback.
+ENV_PATH=${ENV_PATH:-$PWD/.venv}
+if [[ ! -f "${ENV_PATH}/bin/activate" ]]; then
+  echo "kein venv unter ${ENV_PATH} -> versuche 'uv sync' ..."
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "FEHLER: 'uv' nicht im PATH. Einmalig installieren:"
+    echo "  curl -LsSf https://astral.sh/uv/install.sh | sh    # dann Shell neu"
+    echo "Danach auf der LOGIN-Node (Internet!):  cd '$PWD' && uv sync"
+    exit 1
+  fi
+  uv sync                       # erstellt $PWD/.venv aus uv.lock
+fi
 source "${ENV_PATH}/bin/activate"
 
 # variable Sequenzlaengen + mehrere Modelle -> Fragmentierung vermeiden
