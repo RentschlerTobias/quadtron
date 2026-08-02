@@ -22,6 +22,7 @@ Streamline (max-dist / Chord), vergleichbar mit dem Fit-Floor (Targets selbst).
 import argparse
 import math
 import os
+import sys
 import time
 import numpy as np
 import torch
@@ -126,10 +127,13 @@ def run_epoch(model, order, examples, bs, opt, sched, clip, device, train=True,
     tot = cnt = 0.0
     ctx = torch.enable_grad() if train else torch.no_grad()
     steps = range(0, len(order), bs)
+    nsteps = len(steps)
+    show_bar = progress and sys.stderr.isatty()   # Balken nur im TTY; Log -> Prints
     bar = tqdm(steps, desc=f"ep{epoch} {'train' if train else 'val'}", unit="batch",
-               leave=False, dynamic_ncols=True) if progress else steps
+               leave=False, dynamic_ncols=True) if show_bar else steps
+    log_every = max(1, nsteps // 10)
     with ctx:
-        for s in bar:
+        for bi, s in enumerate(bar):
             batch = [examples[i] for i in order[s:s + bs]]
             vf, e_new, tgt, vpad, epad = collate(batch)
             vf, e_new, tgt = vf.to(device), e_new.to(device), tgt.to(device)
@@ -144,8 +148,11 @@ def run_epoch(model, order, examples, bs, opt, sched, clip, device, train=True,
                 opt.step(); sched.step()
             n = int(m.sum())
             tot += loss.item() * n; cnt += n
-            if progress:
+            if show_bar:
                 bar.set_postfix(l1=f"{tot/max(cnt,1):.5f}")
+            elif progress and (bi % log_every == 0 or bi == nsteps - 1):
+                print(f"  ep{epoch} {'train' if train else 'val'} {bi+1:4d}/{nsteps} "
+                      f"l1 {tot/max(cnt,1):.5f}", flush=True)
     return tot / max(cnt, 1)
 
 

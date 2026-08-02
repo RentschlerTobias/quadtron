@@ -22,6 +22,7 @@ zusaetzliches Memory-Token an die Punkt-Latents konkateniert (Meshtron-Muster).
 import argparse
 import math
 import os
+import sys
 import time
 import numpy as np
 import torch
@@ -157,10 +158,15 @@ def run_epoch(model, order, examples, bs, opt, sched, clip, device, start_id,
     tot = cnt = correct = 0.0
     ctx = torch.enable_grad() if train else torch.no_grad()
     steps = range(0, len(order), bs)
+    nsteps = len(steps)
+    # Live-Balken nur im echten TTY (interaktiv/salloc). In SLURM-Logs (Nicht-TTY)
+    # wuerde tqdm 1 Zeile/Batch schreiben -> stattdessen ~10 saubere Prints/Epoche.
+    show_bar = progress and sys.stderr.isatty()
     bar = tqdm(steps, desc=f"ep{epoch} {'train' if train else 'val'}", unit="batch",
-               leave=False, dynamic_ncols=True) if progress else steps
+               leave=False, dynamic_ncols=True) if show_bar else steps
+    log_every = max(1, nsteps // 10)
     with ctx:
-        for s in bar:
+        for bi, s in enumerate(bar):
             batch = [examples[i] for i in order[s:s + bs]]
             pts, ppad, din, tgt, n = collate(batch, start_id, pad_id)
             pts, ppad, din, tgt, n = (pts.to(device), ppad.to(device), din.to(device),
@@ -179,8 +185,11 @@ def run_epoch(model, order, examples, bs, opt, sched, clip, device, start_id,
                 pred = logits.argmax(-1)
                 correct += float((pred[m] == tgt[m]).sum()); k = int(m.sum())
                 tot += loss.item() * k; cnt += k
-            if progress:
+            if show_bar:
                 bar.set_postfix(loss=f"{tot/max(cnt,1):.3f}", acc=f"{correct/max(cnt,1):.3f}")
+            elif progress and (bi % log_every == 0 or bi == nsteps - 1):
+                print(f"  ep{epoch} {'train' if train else 'val'} {bi+1:4d}/{nsteps} "
+                      f"loss {tot/max(cnt,1):.3f} acc {correct/max(cnt,1):.3f}", flush=True)
     return tot / max(cnt, 1), correct / max(cnt, 1)
 
 
