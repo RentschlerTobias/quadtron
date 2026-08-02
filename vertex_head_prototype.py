@@ -274,6 +274,9 @@ def main():
     ap.add_argument('--limit', type=int, default=None)
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--save', default=None, help='Modell + Meta hier speichern (.pt)')
+    ap.add_argument('--init', default=None,
+                    help='Warmstart: Gewichte aus vertex_head-ckpt laden und '
+                         'WEITER trainieren (frischer Kosinus-LR). Kein Optimizer-State.')
     args = ap.parse_args()
 
     torch.manual_seed(args.seed); np.random.seed(args.seed)
@@ -308,6 +311,16 @@ def main():
     n_par = sum(p.numel() for p in model.parameters())
     print(f"VertexGen d={args.d_model} enc={args.n_enc} dec={args.n_dec}  "
           f"Params {n_par/1e6:.2f}M  device={device}")
+
+    if args.init:                                    # Warmstart aus vorherigem ckpt
+        ck = torch.load(args.init, weights_only=False, map_location=device)
+        for k, want in (('vocab', vocab), ('max_len', max_len), ('d_model', args.d_model)):
+            got = ck.get(k)
+            assert got is None or got == want, \
+                f"init-ckpt {k}={got} != aktuell {want} (Architektur/Daten muessen passen)"
+        model.load_state_dict(ck['model'])
+        print(f"== Warmstart aus {args.init} (war ep{ck.get('epoch')}, "
+              f"val-loss {ck.get('val_loss')}) -> trainiere weiter ==")
 
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     spe = math.ceil(len(train_ids) / args.batch)

@@ -56,14 +56,21 @@ BATCH=${BATCH:-256}         # A100 40GB: batch96 -> ~11GB peak; 256 ~28GB, Luft 
 EPOCHS=${EPOCHS:-30}
 LR=${LR:-8e-4}             # ~sqrt-Skalierung von 5e-4@96 auf batch 256
 SEED=${SEED:-0}
+INIT=${INIT:-}             # Warmstart: weiter von vorherigem S1-ckpt (Gewichte). Bei
+                           # Fortsetzung LR kleiner sinnvoll, z.B. LR=3e-4 EPOCHS=10.
 SAVE=${SAVE:-runs_planb/s1_aug_${SLURM_JOB_ID:-local}.pt}   # bestehendes s1_var.pt NICHT ueberschreiben
 
 echo "[$(date -Is)] host=$(hostname) node=${SLURMD_NODENAME:-?} part=${SLURM_JOB_PARTITION:-?} gpu=${CUDA_VISIBLE_DEVICES:-?}"
-echo "  data=$DATA d=$DMODEL batch=$BATCH epochs=$EPOCHS lr=$LR seed=$SEED save=$SAVE"
+echo "  data=$DATA d=$DMODEL batch=$BATCH epochs=$EPOCHS lr=$LR seed=$SEED save=$SAVE init=${INIT:-<none>}"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
 
-srun python -u vertex_head_prototype.py \
-  --data "$DATA" --d-model "$DMODEL" --batch "$BATCH" \
-  --epochs "$EPOCHS" --lr "$LR" --seed "$SEED" --save "$SAVE"
+CMD=(python -u vertex_head_prototype.py
+  --data "$DATA" --d-model "$DMODEL" --batch "$BATCH"
+  --epochs "$EPOCHS" --lr "$LR" --seed "$SEED" --save "$SAVE")
+if [[ -n "$INIT" ]]; then
+  CMD+=(--init "$INIT")       # Warmstart -> weitertrainieren
+fi
+echo "+ ${CMD[*]}"
+srun "${CMD[@]}"
 
 echo "[$(date -Is)] fertig -> $SAVE"
