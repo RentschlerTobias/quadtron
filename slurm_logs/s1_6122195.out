@@ -1,0 +1,33 @@
+[2026-08-02T23:47:16+02:00] host=uc2n565.localdomain node=uc2n565 part=gpu_a100_short gpu=0
+  data=domain_data_aug.pt d=256 batch=96 epochs=40 seed=0 save=runs_planb/s1_aug_6122195.pt
+NVIDIA A100-PCIE-40GB, 40960 MiB
+Lade domain_data_aug.pt ...
+baue Vertex-Beispiele (alle Facecounts) ...
+31952 Beispiele in 47s  |  facecounts {6: 7988, 24: 7988, 54: 7988, 96: 7988}  |  seq 37..370  vocab 1027
+split: 28757 train / 3195 val
+VertexGen d=256 enc=4 dec=4  Params 8.13M  device=cuda
+ep   1  tr-loss 5.1572 tr-acc 0.140  |  val-loss 3.0487 val-acc 0.293  lr 2.5e-04 peakVRAM 11.13GB  *best*
+ep   2  tr-loss 2.6204 tr-acc 0.334  |  val-loss 2.1310 val-acc 0.395  lr 5.0e-04 peakVRAM 11.13GB  *best*
+ep   3  tr-loss 1.9954 tr-acc 0.418  |  val-loss 1.6906 val-acc 0.476  lr 5.0e-04 peakVRAM 11.13GB  *best*
+ep   4  tr-loss 1.6803 tr-acc 0.474  |  val-loss 1.4372 val-acc 0.526  lr 5.0e-04 peakVRAM 11.13GB  *best*
+ep   5  tr-loss 1.4792 tr-acc 0.514  |  val-loss 1.2783 val-acc 0.562  lr 4.9e-04 peakVRAM 11.13GB  *best*
+     6F: count-ok 1.00 err% med 1.23 p90 4.53  |  24F: count-ok 0.88 err% med 2.05 p90 16.25  |  54F: count-ok 0.93 err% med 2.26 p90 19.42  |  96F: count-ok 0.84 err% med 4.81 p90 22.01
+ep   6  tr-loss 1.3359 tr-acc 0.544  |  val-loss 1.1558 val-acc 0.590  lr 4.9e-04 peakVRAM 11.13GB  *best*
+ep   7  tr-loss 1.2247 tr-acc 0.570  |  val-loss 1.0544 val-acc 0.616  lr 4.8e-04 peakVRAM 11.13GB  *best*
+ep   8  tr-loss 1.1405 tr-acc 0.590  |  val-loss 0.9787 val-acc 0.637  lr 4.7e-04 peakVRAM 11.13GB  *best*
+ep   9  tr-loss 1.0710 tr-acc 0.608  |  val-loss 0.9199 val-acc 0.652  lr 4.6e-04 peakVRAM 11.13GB  *best*
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc2n565
+Job ID: 6122195
+Cluster: uc3
+User/Group: st_ac136362/st_us-042020
+State: TIMEOUT (exit code 0)
+Nodes: 1
+Cores per node: 16
+CPU Utilized: 00:00:00
+CPU Efficiency: 0.00% of 08:01:04 core-walltime
+Job Wall-clock time: 00:30:04
+Memory Utilized: 8.76 GB
+Memory Efficiency: 7.04% of 124.51 GB (124.51 GB/node)
