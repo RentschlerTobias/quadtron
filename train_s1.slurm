@@ -52,17 +52,18 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # --- Hyperparameter (per env ueberschreibbar) -------------------------------
 DATA=${DATA:-domain_data_aug.pt}
 DMODEL=${DMODEL:-256}
-BATCH=${BATCH:-96}
-EPOCHS=${EPOCHS:-40}
+BATCH=${BATCH:-256}         # A100 40GB: batch96 -> ~11GB peak; 256 ~28GB, Luft bleibt
+EPOCHS=${EPOCHS:-30}
+LR=${LR:-8e-4}             # ~sqrt-Skalierung von 5e-4@96 auf batch 256
 SEED=${SEED:-0}
 SAVE=${SAVE:-runs_planb/s1_aug_${SLURM_JOB_ID:-local}.pt}   # bestehendes s1_var.pt NICHT ueberschreiben
 
 echo "[$(date -Is)] host=$(hostname) node=${SLURMD_NODENAME:-?} part=${SLURM_JOB_PARTITION:-?} gpu=${CUDA_VISIBLE_DEVICES:-?}"
-echo "  data=$DATA d=$DMODEL batch=$BATCH epochs=$EPOCHS seed=$SEED save=$SAVE"
+echo "  data=$DATA d=$DMODEL batch=$BATCH epochs=$EPOCHS lr=$LR seed=$SEED save=$SAVE"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
 
 srun python -u vertex_head_prototype.py \
   --data "$DATA" --d-model "$DMODEL" --batch "$BATCH" \
-  --epochs "$EPOCHS" --seed "$SEED" --save "$SAVE"
+  --epochs "$EPOCHS" --lr "$LR" --seed "$SEED" --save "$SAVE"
 
 echo "[$(date -Is)] fertig -> $SAVE"

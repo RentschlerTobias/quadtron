@@ -20,6 +20,7 @@ Padding-Schema:
 import argparse
 import math
 import os
+import sys
 import time
 import numpy as np
 import torch
@@ -57,10 +58,13 @@ def run_epoch(model, order, examples, bs, opt, sched, clip, device, train=True,
     tot_loss = tot_tok = tf_correct = 0.0
     ctx = torch.enable_grad() if train else torch.no_grad()
     steps = range(0, len(order), bs)
+    nsteps = len(steps)
+    show_bar = progress and sys.stderr.isatty()   # Balken nur im TTY; Log -> Prints
     bar = tqdm(steps, desc=f"ep{epoch} {'train' if train else 'val'}", unit="batch",
-               leave=False, dynamic_ncols=True) if progress else steps
+               leave=False, dynamic_ncols=True) if show_bar else steps
+    log_every = max(1, nsteps // 10)
     with ctx:
-        for s in bar:
+        for bi, s in enumerate(bar):
             batch = [examples[i] for i in order[s:s + bs]]
             vf, vpad, ptr, tpad, _ = collate(batch)
             vf, vpad, ptr, tpad = vf.to(device), vpad.to(device), ptr.to(device), tpad.to(device)
@@ -79,9 +83,13 @@ def run_epoch(model, order, examples, bs, opt, sched, clip, device, train=True,
                 tf_correct += float((pred[m] == ptr[m]).sum())
                 ntok = int(m.sum())
                 tot_loss += loss.item() * ntok; tot_tok += ntok
-            if progress:
+            if show_bar:
                 bar.set_postfix(loss=f"{tot_loss/max(tot_tok,1):.3f}",
                                 acc=f"{tf_correct/max(tot_tok,1):.3f}")
+            elif progress and (bi % log_every == 0 or bi == nsteps - 1):
+                print(f"  ep{epoch} {'train' if train else 'val'} {bi+1:4d}/{nsteps} "
+                      f"loss {tot_loss/max(tot_tok,1):.3f} acc {tf_correct/max(tot_tok,1):.3f}",
+                      flush=True)
     return tot_loss / tot_tok, tf_correct / tot_tok
 
 
