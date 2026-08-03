@@ -140,6 +140,7 @@ def main():
     ap.add_argument('--eval-n', type=int, default=150)
     ap.add_argument('--gallery', type=int, default=6)
     ap.add_argument('--limit', type=int, default=None)
+    ap.add_argument('--lr', type=float, default=5e-4, help='LR fuer alle 3 Koepfe')
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--save-dir', default=None, help='3 Koepfe nach Training hier speichern')
     ap.add_argument('--load-dir', default=None, help='3 Koepfe laden, Training ueberspringen')
@@ -189,28 +190,38 @@ def main():
         gmodel.load_state_dict(torch.load(f"{args.load_dir}/s3_geom.pt", map_location=device))
         print(f"== 3 Koepfe geladen aus {args.load_dir} (Training uebersprungen) ==")
     else:
+        if args.save_dir:                        # meta frueh -> teilweise Ergebnisse nutzbar
+            os.makedirs(args.save_dir, exist_ok=True)
+            torch.save({'d_model': args.d_model, 'vocab': VOCAB, 'start': START,
+                        'stop': STOP, 'pad': PAD, 'max_len': max_len,
+                        'data': args.data, 'seed': args.seed}, f"{args.save_dir}/meta.pt")
+
+        def _save(fname, m):                     # jede Stufe SOFORT nach Training sichern
+            if args.save_dir:                    # (24h-Job-Crash behaelt fertige Stufen)
+                torch.save(m.state_dict(), f"{args.save_dir}/{fname}")
+                print(f"  == {fname} gespeichert -> {args.save_dir}/ ==", flush=True)
+
         if args.load_s1:
             ck = torch.load(args.load_s1, weights_only=False, map_location=device)
             assert ck['d_model'] == args.d_model, \
                 f"S1 d_model {ck['d_model']} != --d-model {args.d_model}"
             vmodel.load_state_dict(ck['model'])
             print(f"== S1 geladen aus {args.load_s1} (ep{ck.get('epoch')}), trainiere nur S2+S3 ==")
+            _save('s1_vertex.pt', vmodel)
         else:
-            print("== Training 3 Koepfe ==")
+            print("== Training S1 ==")
             train_head('S1', vmodel, vh.run_epoch, ex_v, train_ids, val_ids, args.ep1,
-                       args.batch, 5e-4, device, rng, extra=(START, PAD))
+                       args.batch, args.lr, device, rng, extra=(START, PAD))
+            _save('s1_vertex.pt', vmodel)
+        print("== Training S2 ==")
         train_head('S2', pmodel, tp.run_epoch, ex_p, train_ids, val_ids, args.ep2,
-                   args.batch, 5e-4, device, rng)
+                   args.batch, args.lr, device, rng)
+        _save('s2_pointer.pt', pmodel)
+        print("== Training S3 ==")
         train_head('S3', gmodel, gh.run_epoch, ex_g, train_ids, val_ids, args.ep3,
-                   args.batch, 5e-4, device, rng)
+                   args.batch, args.lr, device, rng)
+        _save('s3_geom.pt', gmodel)
         if args.save_dir:
-            os.makedirs(args.save_dir, exist_ok=True)
-            torch.save(vmodel.state_dict(), f"{args.save_dir}/s1_vertex.pt")
-            torch.save(pmodel.state_dict(), f"{args.save_dir}/s2_pointer.pt")
-            torch.save(gmodel.state_dict(), f"{args.save_dir}/s3_geom.pt")
-            torch.save({'d_model': args.d_model, 'vocab': VOCAB, 'start': START,
-                        'stop': STOP, 'pad': PAD, 'max_len': max_len,
-                        'data': args.data, 'seed': args.seed}, f"{args.save_dir}/meta.pt")
             print(f"== 3 Koepfe gespeichert -> {args.save_dir}/ ==")
 
     print("== Chain-Inferenz auf held-out (je Facecount) ==")

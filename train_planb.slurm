@@ -79,6 +79,7 @@ BATCH=${BATCH:-96}          # A100 (bis 510GB Knoten-RAM/40GB VRAM) vertraegt vi
 EP1=${EP1:-30}              # S1 vertices  (nur relevant ohne LOAD_S1)
 EP2=${EP2:-25}              # S2 pointer faces
 EP3=${EP3:-25}              # S3 HO-geometry
+LR=${LR:-5e-4}              # LR fuer alle 3 Koepfe
 SEED=${SEED:-0}
 LIMIT=${LIMIT:-}            # nur erste K Meshes -> schnellerer Beispiel-Bau (ex_g/bezier
                            # ist teuer). Fuer 30-min-Test z.B. LIMIT=8000. Leer=alle 31952.
@@ -87,7 +88,7 @@ OUT=${OUT:-figures/e2e/e2e_gallery_${SLURM_JOB_ID:-local}.png}
 LOAD_S1=${LOAD_S1:-}        # optional: vortrainiertes S1 (vertex_head-Format) -> nur S2+S3
 
 echo "[$(date -Is)] host=$(hostname) node=${SLURMD_NODENAME:-?} part=${SLURM_JOB_PARTITION:-?} gpu=${CUDA_VISIBLE_DEVICES:-?}"
-echo "  data=$DATA d=$DMODEL batch=$BATCH ep=[$EP1,$EP2,$EP3] seed=$SEED"
+echo "  data=$DATA d=$DMODEL batch=$BATCH ep=[$EP1,$EP2,$EP3] lr=$LR seed=$SEED limit=${LIMIT:-<all>}"
 echo "  save-dir=$SAVE_DIR  out=$OUT  load-s1=${LOAD_S1:-<none>}"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
 
@@ -96,6 +97,7 @@ CMD=(python -u chain_e2e.py
   --d-model "$DMODEL"
   --batch "$BATCH"
   --ep1 "$EP1" --ep2 "$EP2" --ep3 "$EP3"
+  --lr "$LR"
   --seed "$SEED"
   --save-dir "$SAVE_DIR"
   --out "$OUT")
