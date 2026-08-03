@@ -80,6 +80,8 @@ EP1=${EP1:-30}              # S1 vertices  (nur relevant ohne LOAD_S1)
 EP2=${EP2:-25}              # S2 pointer faces
 EP3=${EP3:-25}              # S3 HO-geometry
 SEED=${SEED:-0}
+LIMIT=${LIMIT:-}            # nur erste K Meshes -> schnellerer Beispiel-Bau (ex_g/bezier
+                           # ist teuer). Fuer 30-min-Test z.B. LIMIT=8000. Leer=alle 31952.
 SAVE_DIR=${SAVE_DIR:-runs_planb/e2e_${SLURM_JOB_ID:-local}}
 OUT=${OUT:-figures/e2e/e2e_gallery_${SLURM_JOB_ID:-local}.png}
 LOAD_S1=${LOAD_S1:-}        # optional: vortrainiertes S1 (vertex_head-Format) -> nur S2+S3
@@ -98,6 +100,9 @@ CMD=(python -u chain_e2e.py
   --save-dir "$SAVE_DIR"
   --out "$OUT")
 
+if [[ -n "$LIMIT" ]]; then
+  CMD+=(--limit "$LIMIT")     # Beispiel-Bau auf Subset beschraenken
+fi
 if [[ -n "$LOAD_S1" ]]; then
   CMD+=(--load-s1 "$LOAD_S1")   # S1-Training ueberspringen, nur S2+S3
 fi
