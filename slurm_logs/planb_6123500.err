@@ -1,0 +1,11 @@
+GpuFreq=control_disabled
+/pfs/work9/workspace/scratch/st_ac136362-meshtron/meshtron/vertex_head_prototype.py:83: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  self.encoder = nn.TransformerEncoder(enc, n_enc)
+/pfs/work9/workspace/scratch/st_ac136362-meshtron/meshtron/pointer_head_prototype.py:88: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  self.encoder = nn.TransformerEncoder(enc_layer, n_enc)
+/pfs/work9/workspace/scratch/st_ac136362-meshtron/meshtron/geom_head_prototype.py:87: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  self.encoder = nn.TransformerEncoder(enc, n_enc)
+/pfs/work9/workspace/scratch/st_ac136362-meshtron/meshtron/geom_head_prototype.py:92: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  self.edge_enc = nn.TransformerEncoder(eec, n_edge)
+/pfs/work9/workspace/scratch/st_ac136362-meshtron/meshtron/.venv/lib64/python3.12/site-packages/torch/nn/modules/activation.py:1336: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  key_padding_mask = F._canonical_mask(

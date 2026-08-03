@@ -1,0 +1,4 @@
+GpuFreq=control_disabled
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+[2026-08-03T02:27:48.953] error: *** JOB 6122670 ON uc2n565 CANCELLED AT 2026-08-03T02:27:48 DUE to SIGNAL Terminated ***
+[2026-08-03T02:27:48.953] error: *** STEP 6122670.0 ON uc2n565 CANCELLED AT 2026-08-03T02:27:48 DUE to SIGNAL Terminated ***
