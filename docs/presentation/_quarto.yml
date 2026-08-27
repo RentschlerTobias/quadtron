@@ -1,0 +1,38 @@
+project:
+  title: "AIFluids 2026 — Adjacency-Preserving Quad Tokenization"
+
+format:
+  revealjs:
+    theme: [default, broadsheet.scss]
+    width: 1920
+    height: 1080
+    margin: 0.035
+    min-scale: 0.2
+    max-scale: 2.0
+    center: false
+    slide-number: c/t
+    footer: "AIFluids 2026 · IHS Stuttgart"
+
+    title-slide-attributes:
+      data-background-image: images/titel_la_mirror.png
+      data-background-size: cover
+      data-background-position: center
+
+    chalkboard: true
+    menu:
+      side: left
+      numbers: true
+    navigation-mode: grid
+    controls: true
+    controls-layout: bottom-right
+    progress: true
+    hash: true
+    transition: fade
+    transition-speed: fast
+    overview: true
+    touch: true
+
+    html-math-method: mathjax
+    fig-align: left
+    incremental: false
+    link-external-newwindow: true
