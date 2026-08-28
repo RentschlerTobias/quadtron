@@ -270,7 +270,7 @@ $table-border-color: rgba($bs-text, 0.16);
 .reveal a { color: $bs-accent-700; text-underline-offset: 3px; }
 
 // -- columns (Quarto ::: {.columns}) -----------------------------------------
-.reveal .columns { gap: 3rem; align-items: flex-start; }
+.reveal .columns { gap: 3rem; align-items: center; }
 .reveal .column h3 {
   font-size: 1.15em;
   margin-bottom: 0.5em;
