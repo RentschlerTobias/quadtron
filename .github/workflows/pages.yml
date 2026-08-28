@@ -32,7 +32,7 @@ jobs:
         uses: quarto-dev/quarto-actions/render@v2
         with:
           path: docs/presentation
-          to: html
+          to: revealjs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
