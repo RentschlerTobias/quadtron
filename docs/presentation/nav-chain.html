@@ -1,0 +1,39 @@
+<script>
+// navigation-mode is "linear": all 4 arrows chain through the deck as
+// next/prev, which is what makes ArrowDown at the bottom of a column
+// advance straight into the next chapter. The one thing linear mode takes
+// away is a direct sideways chapter jump via ArrowLeft/ArrowRight.
+//
+// This patches that back in, but only on the first (top) slide of a
+// column. Deliberately NOT using Reveal.left()/.right() here: those
+// remember the last-visited vertical slide per column and restore it,
+// so returning to a chapter lands wherever you left off instead of at
+// its top — Reveal.slide(h, 0) jumps to an explicit index and always
+// lands on v=0 of the neighboring chapter. On any other slide (v > 0)
+// left/right are left alone, so they keep the plain linear prev/next
+// behavior. Up/Down are never touched here.
+(function () {
+  function attach() {
+    document.addEventListener('keydown', function (event) {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+
+      var indices = Reveal.getIndices();
+      if (indices.v !== 0) return; // not the top slide of a column
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      var targetH = indices.h + (event.key === 'ArrowRight' ? 1 : -1);
+      Reveal.slide(targetH, 0);
+    }, true); // capture phase: run before reveal's own linear-mode handler
+  }
+
+  if (window.Reveal && Reveal.isReady && Reveal.isReady()) {
+    attach();
+  } else {
+    document.addEventListener('DOMContentLoaded', function () {
+      if (window.Reveal) Reveal.on('ready', attach);
+    });
+  }
+})();
+</script>

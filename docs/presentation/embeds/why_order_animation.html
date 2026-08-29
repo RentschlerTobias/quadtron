@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Why Order Matters — step-through</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: transparent; font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    color: #201e1d; height: 100vh; display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .panels {
+    flex: 1; min-height: 0; display: flex; flex-direction: row;
+    align-items: center; justify-content: center; gap: 1.2rem; padding: 0.4rem;
+  }
+  .panel { display: flex; align-items: center; justify-content: center; height: 100%; }
+  .panel img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .progress-track {
+    position: relative; height: 4px; margin: 0.2rem 0.6rem 0;
+    border-radius: 2px; overflow: hidden; flex-shrink: 0;
+  }
+  .progress-gradient {
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, #0088b0, #d6006c);
+  }
+  .progress-mask {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 100%;
+    background: #eae9e9; transition: width 0.15s ease;
+  }
+  .controls { display: flex; gap: 0.5rem; padding: 0.35rem 0.6rem 0.5rem; flex-shrink: 0; }
+  .step-btn {
+    flex: 1; height: 58px;
+    display: flex; align-items: center; justify-content: center;
+    background: #eae9e9; border: 1.5px solid #9a9490; border-radius: 6px;
+    font-family: inherit; font-size: 1.4rem; padding: 0; cursor: pointer;
+    color: #201e1d;
+    transition: border-color 0.15s ease, color 0.15s ease,
+                transform 0.1s ease, box-shadow 0.15s ease;
+  }
+  .step-btn:hover:not(:disabled) {
+    border-color: #d6006c; color: #d6006c;
+    box-shadow: 0 2px 6px rgba(214, 0, 108, 0.18);
+  }
+  .step-btn:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+  .step-btn:focus-visible {
+    outline: none; border-color: #0088b0;
+    box-shadow: 0 0 0 3px rgba(0, 136, 176, 0.25);
+  }
+  .step-btn:disabled { opacity: 0.35; cursor: default; }
+</style>
+</head>
+<body>
+
+<div class="panels">
+  <div class="panel"><img id="panelA" alt="row-major, step-through"></div>
+  <div class="panel"><img id="panelB" alt="column-major, step-through"></div>
+</div>
+
+<div class="progress-track">
+  <div class="progress-gradient"></div>
+  <div class="progress-mask" id="progressMask"></div>
+</div>
+<div class="controls">
+  <button class="step-btn" id="prevBtn">&larr;</button>
+  <button class="step-btn" id="nextBtn">&rarr;</button>
+</div>
+
+<script>
+(function () {
+  var maxIdx = 9;
+  var idx = 0;
+  var panelA = document.getElementById('panelA');
+  var panelB = document.getElementById('panelB');
+  var prevBtn = document.getElementById('prevBtn');
+  var nextBtn = document.getElementById('nextBtn');
+  var progressMask = document.getElementById('progressMask');
+
+  function render() {
+    panelA.src = '../images/frames/order_row_' + idx + '.png';
+    panelB.src = '../images/frames/order_col_' + idx + '.png';
+    progressMask.style.width = (100 - (idx / maxIdx) * 100) + '%';
+    prevBtn.disabled = (idx === 0);
+    nextBtn.disabled = (idx === maxIdx);
+  }
+
+  prevBtn.addEventListener('click', function () { if (idx > 0) { idx -= 1; render(); } });
+  nextBtn.addEventListener('click', function () { if (idx < maxIdx) { idx += 1; render(); } });
+
+  render();
+})();
+</script>
+</body>
+</html>

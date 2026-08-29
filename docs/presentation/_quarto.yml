@@ -22,7 +22,14 @@ format:
     menu:
       side: left
       numbers: true
-    navigation-mode: grid
+    # linear: all 4 arrows chain across chapter boundaries (down/right = next,
+    # up/left = prev) so you never get stuck at the bottom of a column. Was
+    # "grid" (strict spatial moves, no chaining) — reapply this note if this
+    # deck's structure is reused (e.g. the Eigenfrequency deck).
+    # nav-chain.html patches left/right back to a direct sideways chapter
+    # jump, but only on the first slide of a column (see file for why).
+    navigation-mode: linear
+    include-after-body: nav-chain.html
     controls: true
     controls-layout: bottom-right
     progress: true
