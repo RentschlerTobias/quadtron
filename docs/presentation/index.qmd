@@ -121,9 +121,9 @@ This is where the problem from the last slide really shows. On the mesh on your 
 
 - Take the first tensor in the stack
 - **Half-Edge Boundary Walk**
+  - ![](images/half_edge_sketch.png){width="95%"}
   - cw 2 edges from entrance edge
   - select opposite half-edge
-  - ![](images/half_edge_sketch.png){width="95%"}
 - **Row Ends** 
   - flip right-to-left rows to left-to-right
   - remove visited faces from stack, repeat with next stack entry
