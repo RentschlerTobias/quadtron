@@ -271,6 +271,19 @@ $table-border-color: rgba($bs-text, 0.16);
 
 // -- columns (Quarto ::: {.columns}) -----------------------------------------
 .reveal .columns { gap: 3rem; align-items: center; }
+
+// Quarto's default column layout is display:inline-block + vertical-align:top
+// (see div.column / div.columns resets above), so the align-items:center on
+// .reveal .columns above is inert there. Opt in per-slide with .v-center for
+// a real flex row when the two columns have very different content heights
+// and should be vertically balanced instead of top-aligned.
+.reveal .columns.v-center { display: flex; }
+.reveal .columns.v-center > .column { display: block; vertical-align: initial; }
+
+// Pandoc tables default to content-width (shrink-to-fit); .wide-table stretches
+// the table to fill its wrapper, e.g. to match an image above it of the same width.
+.reveal .wide-table table { width: 100%; }
+
 .reveal .column h3 {
   font-size: 1.15em;
   margin-bottom: 0.5em;
