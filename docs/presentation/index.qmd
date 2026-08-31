@@ -1,5 +1,5 @@
 ---
-title: "Adjacency-Preserving Tokenization for Transformer-Based Quadrilateral Mesh Generation"
+title: "Tokenization for Transformer-Based Quadrilateral Mesh Generation"
 subtitle: "AIFLUIDs 2026"
 author:
   - name: "T. Rentschler, A. Tismer, S. Riedelbauch · IHS, University of Stuttgart"
@@ -64,9 +64,6 @@ The problem: even a small 2D test case, 1,576 faces, needs 12,608 tokens if you 
   - Order the face tensors by $(y,x)$
 - Vertex order within a face depends on face shape
   - Modern Method uses a boundary walk
-  - A regular, consistent ordering is easier for the transformer to
-    learn than an unstructured one
-
 :::
 :::
 ::: {.column width="58%"}
@@ -92,9 +89,9 @@ The first strategy we'll look at is a simple two-step sort. Within each face, we
 **The Problem — no structure to exploit**
 
 - Order jumps across the mesh
-  - face-order color scatters — mesh neighbours end up far apart in the sequence
+  - mesh neighbours end up far apart in the sequence
 - Every vertex re-tokenized per face
-  - no compression possible — duplicates land at unpredictable positions
+  - duplicates land at unpredictable positions
 :::
 
 ::: {.column width="48%"}
@@ -121,11 +118,15 @@ This is where the problem from the last slide really shows. On the mesh on your 
   - face-tensor stack
 
 ::: {.incremental}
+
+- Take the first tensor in the stack
 - **Half-Edge Boundary Walk**
-  - Take the first tensor in the stack
-  - Walk to adjacent faces clockwise via the half-edge structure
-  - Remove visited faces from the stack
-  - No adjacent face left → repeat from 1 with the next stack entry
+  - cw 2 edges from entrance edge
+  - select opposite half-edge
+  - ![](images/half_edge_sketch.png){width="95%"}
+- **Row Ends** 
+  - flip right-to-left rows to left-to-right
+  - remove visited faces from stack, repeat with next stack entry
 :::
 :::
 ::: {.column width="58%"}
@@ -147,8 +148,8 @@ Our solution starts exactly the same way as the previous slide: the same two-ste
 ::: {.column width="42%"}
 
 - **Result:** last 2 vertices of face $i$ = first 2 of face $i+1$
-- discontinuities only between rows, not within faces
 - **predictable** repeated token positions
+- discontinuities only between rows, not within faces
 - duplicated vertices within each row can be avoided by adding an end of row token
 :::
 ::: {.column width="58%"}
@@ -516,7 +517,31 @@ Work in progress: extending from 2D block structures to full 3D. Turbomachinery 
 Thank you for your attention — happy to take questions. This work was funded by the German Research Foundation, DFG, under the special priority program SPP-2353, project number 501932169. The QR codes link to the SPP-2353 funding programme and to our paper, code, and dataset on GitHub Pages.
 :::
 
+## Sources
 
+::: {.columns}
+::: {.column style="width:50%; font-size:1.2rem; line-height:1.6;"}
+**Architecture & training**
+
+- A. Vaswani et al. *Attention Is All You Need.* NeurIPS, 2017. [arXiv:1706.03762](https://arxiv.org/abs/1706.03762)
+- J. Su et al. *RoFormer: Enhanced Transformer with Rotary Position Embedding.* 2021. [arXiv:2104.09864](https://arxiv.org/abs/2104.09864)
+- A. Jaegle et al. *Perceiver: General Perception with Iterative Attention.* ICML, 2021. [arXiv:2103.03206](https://arxiv.org/abs/2103.03206)
+- T. Akiba et al. *Optuna: A Next-Generation Hyperparameter Optimization Framework.* KDD, 2019. [arXiv:1907.10902](https://arxiv.org/abs/1907.10902)
+:::
+::: {.column style="width:50%; font-size:1.2rem; line-height:1.6;"}
+**Mesh generation & domain partition**
+
+- C. Nash et al. *PolyGen: An Autoregressive Generative Model of 3D Meshes.* ICML, 2020. [arXiv:2002.10880](https://arxiv.org/abs/2002.10880)
+- Z. Hao et al. *Meshtron: High-Fidelity, Artist-Like 3D Mesh Generation at Scale.* 2024. [arXiv:2412.09548](https://arxiv.org/abs/2412.09548)
+- M. Botsch et al. *OpenMesh — A Generic and Efficient Polygon Mesh Data Structure.* OpenSGplus Workshop, 2002.
+- N. Kowalski, F. Ledoux, P. Frey. *A PDE Based Approach to Multidomain Partitioning and Quadrilateral Meshing.* IMR, 2013.
+- **T. Rentschler**, A. Tismer, S. Riedelbauch. *Frame Field Prediction for Quadrilateral Domain Partition.* CSME-CFDSC-CSR, 2025. [doi:10.82417/bcta-0d81](https://doi.org/10.82417/bcta-0d81)
+:::
+:::
+
+::: {.notes}
+References for the methods and prior work referenced throughout the talk.
+:::
 
 # Appendix
 
@@ -550,3 +575,5 @@ Thank you for your attention — happy to take questions. This work was funded b
 ::: {.notes}
 Generation is autoregressive, so we must fix an order in which tokens appear, and that position is itself embedded (positional encoding). The mesh itself is hierarchical — faces built from vertices, vertices built from coordinates — but that hierarchy has to be flattened into one linear sequence. And the order we pick isn't neutral: a regular, consistent pattern is far easier for the transformer to learn than an arbitrary one. The key insight: the mesh itself has no order, only a set of vertices and faces. The tokenizer creates one. Same 3x3 grid, two different face traversals, colored by order (blue=first, red=last) — completely different color pattern, completely different token sequence, for the identical mesh. That's why the ordering strategy is the whole talk.
 :::
+
+
