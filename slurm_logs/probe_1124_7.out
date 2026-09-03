@@ -1,0 +1,32 @@
+============================================================
+HOST       : altkanzler.ihs.uni-stuttgart.de
+NODENAME   : altkanzler.ihs.uni-stuttgart.de
+JOBID      : 1124  ARRAY=1124_7
+PARTITION  : blop
+GPU IDS    : ?  (SLURM_JOB_GPUS=?)
+DATE       : 2026-05-11T00:12:29+02:00
+------------------------------------------------------------
+FEATURES   :
+   CPUAlloc=4 CPUEfctv=8 CPUTot=8 CPULoad=0.00
+   AvailableFeatures=i7e5,x8
+   ActiveFeatures=i7e5,x8
+   Gres=(null)
+   RealMemory=257450 AllocMem=8192 FreeMem=253214 Sockets=8 Boards=1
+   CfgTRES=cpu=8,mem=257450M,billing=8
+------------------------------------------------------------
+CPU info   :
+  cores avail to job : 2
+  model              : Intel(R) Xeon(R) W-2245 CPU @ 3.90GHz
+MEM info   :
+  MemTotal:      263629412 kB
+  MemAvailable:  260686148 kB
+------------------------------------------------------------
+GPU (nvidia-smi):
+  nvidia-smi nicht im PATH
+------------------------------------------------------------
+PyTorch CUDA check:
+  torch              : 2.10.0+cu130
+  cuda available     : False
+  device count       : 0
+  CUDA_VISIBLE_DEVICES = None
+============================================================

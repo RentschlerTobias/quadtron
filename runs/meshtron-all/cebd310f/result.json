@@ -1,0 +1,12 @@
+{
+  "t_total_s": 1228.899,
+  "best_val_bpt": 0.4363688614836223,
+  "best_val_nll": 0.3024678460215261,
+  "best_val_perplexity": 1.3531941651455885,
+  "best_epoch": 41,
+  "final_train_bpt": 0.2422196392986396,
+  "final_val_bpt": 0.4389801435995518,
+  "epochs_run": 47,
+  "config_hash": "cebd310f",
+  "run_dir": "runs/meshtron-all/cebd310f"
+}

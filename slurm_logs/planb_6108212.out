@@ -1,0 +1,22 @@
+[2026-07-31T18:02:50+02:00] host=uc2n577.localdomain node=uc2n577 part=gpu_a100_short gpu=0
+  data=domain_data_aug.pt d=256 batch=96 ep=[30,25,25] seed=0
+  save-dir=runs_planb/e2e_6108212  out=figures/e2e/e2e_gallery_6108212.png  load-s1=<none>
+NVIDIA A100-PCIE-40GB, 40960 MiB
++ python -u chain_e2e.py --data domain_data_aug.pt --d-model 256 --batch 96 --ep1 30 --ep2 25 --ep3 25 --seed 0 --save-dir runs_planb/e2e_6108212 --out figures/e2e/e2e_gallery_6108212.png
+Lade domain_data_aug.pt ...
+Meshes: 31952  facecounts {6: 7988, 24: 7988, 54: 7988, 96: 7988}  |  baue Beispiele (S1/S2/S3, index-aligned) ...
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc2n577
+Job ID: 6108212
+Cluster: uc3
+User/Group: st_ac136362/st_us-042020
+State: TIMEOUT (exit code 0)
+Nodes: 1
+Cores per node: 16
+CPU Utilized: 00:00:00
+CPU Efficiency: 0.00% of 08:07:44 core-walltime
+Job Wall-clock time: 00:30:29
+Memory Utilized: 8.11 GB
+Memory Efficiency: 6.51% of 124.51 GB (124.51 GB/node)

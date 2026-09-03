@@ -1,5 +1,7 @@
 from torch.utils.data import DataLoader, Dataset
 import torch
+import numpy as np
+from matplotlib.path import Path
 from tqdm import tqdm
 
 
@@ -9,7 +11,7 @@ class MeshData(Dataset):
     Dataset für Meshtron 
     """
 
-    def __init__(self, meshes, tokenizer, max_seq_length=None, n_sample_points=1500, verbose=True, boundary_points_only=False):
+    def __init__(self, meshes, tokenizer, max_seq_length=None, n_sample_points=1000, verbose=True, boundary_points_only=False):
         """
         meshes: Liste von Mesh-Objekten 
         tokenizer:  Tokenizer2D
@@ -17,8 +19,8 @@ class MeshData(Dataset):
         """
         self.meshes = meshes
         self.tokenizer = tokenizer
+        self.n_sample_points = n_sample_points
         self.data = []
-        self.point_clouds = []
         self.face_count = []
         self.boundary_points_only = boundary_points_only
         if verbose == True:
@@ -29,70 +31,78 @@ class MeshData(Dataset):
             faces = mesh.faces
 
             tokens = tokenizer.tokenize(vertices, faces)
-            point_cloud = self.get_point_cloud(mesh, n_sample_points)
             num_faces = faces.size(1)
 
             self.data.append(tokens)
-
-            self.point_clouds.append(point_cloud)
             self.face_count.append(num_faces)
         if max_seq_length is None:
-            self.max_seq_length = max(len(tokens) for tokens in self.data)
+            # self.max_seq_length = max(len(tokens) for tokens in self.data)
+            self.max_seq_length = tokenizer.max_length_token_sequence
         else:
             self.max_seq_length = max_seq_length
 
-        self.min_seq_length = min(len(tokens) for tokens in self.data)
+        # self.min_seq_length = min(len(tokens) for tokens in self.data)
+        self.min_seq_length = tokenizer.min_length_token_sequence
         print(
             f"\nMax Sequenzlänge: {self.max_seq_length}\nMin Sequenzlänge: {self.min_seq_length}")
 
     def get_point_cloud(self, mesh, n_sample_points):
+        all_coords = mesh.tri_coordinates[:, 0:2]
+        center = (all_coords.max(dim=0).values + all_coords.min(dim=0).values) / 2
+        # uniform scale (same for x and y) um Aspektverhältnis zu erhalten
+        scale = (all_coords.max(dim=0).values - all_coords.min(dim=0).values).max().clamp(min=1e-6)
 
         mask = mesh.tri_coordinates[:, 2] != 2
-
         boundary_points = mesh.tri_coordinates[mask, 0:2]
-        interior_points = mesh.tri_coordinates[~mask, 0:2]
 
         num_boundary_points = boundary_points.size(0)
-        num_interior_points = interior_points.size(0)
-
         remaining = n_sample_points - num_boundary_points
 
-        point_cloud = torch.ones([n_sample_points, 2]) * (-1)
         if num_boundary_points >= n_sample_points:
-            # Sample nur aus Boundary Points
             random_idx = torch.randint(
                 0, num_boundary_points, [n_sample_points])
-            point_cloud[:, :] = boundary_points[random_idx, :]
-
+            point_cloud = boundary_points[random_idx, :]
         else:
+            # Trenne Box-Berandung von NACA-Berandung anhand der Box-Kanten.
+            box_eps = 1e-4
+            on_box = (
+                (boundary_points[:, 0] <= box_eps)
+                | (boundary_points[:, 0] >= 1 - box_eps)
+                | (boundary_points[:, 1] <= box_eps)
+                | (boundary_points[:, 1] >= 1 - box_eps)
+            )
+            naca_points = boundary_points[~on_box].numpy()
 
-            points = []
-            points.append(boundary_points)
-
-            if num_interior_points >= remaining:
-
-                random_idx = torch.randint(
-                    0, num_interior_points, (remaining,)
+            # NACA-Polygon durch Winkelsortierung um den Centroid (star-convex bei Profilen).
+            naca_polygon = None
+            if naca_points.shape[0] >= 3:
+                centroid = naca_points.mean(axis=0)
+                angles = np.arctan2(
+                    naca_points[:, 1] - centroid[1],
+                    naca_points[:, 0] - centroid[0],
                 )
-                points.append(interior_points[random_idx, :])
+                order = np.argsort(angles)
+                naca_polygon = Path(naca_points[order])
 
-            else:
-                repeat_factor = (remaining + num_interior_points -
-                                 1) // num_interior_points  # ceil division
-                interior_repeated = interior_points.repeat(repeat_factor, 1)
+            # Rejection-Sampling: uniform in [0,1]^2 minus NACA-Loch.
+            kept = []
+            n_kept = 0
+            max_iter = 32
+            for _ in range(max_iter):
+                if n_kept >= remaining:
+                    break
+                batch = max(64, int((remaining - n_kept) * 1.5))
+                cand = torch.rand(batch, 2)
+                if naca_polygon is not None:
+                    inside = naca_polygon.contains_points(cand.numpy())
+                    cand = cand[~torch.from_numpy(inside)]
+                kept.append(cand)
+                n_kept += cand.size(0)
 
-                noise_strength = 0.001
-                noise = torch.rand_like(interior_repeated)*noise_strength
-                noisy_interior_points = interior_repeated + noise
-                num_noisy_points = noisy_interior_points.size(0)
+            interior_sampled = torch.cat(kept, dim=0)[:remaining]
+            point_cloud = torch.cat([boundary_points, interior_sampled], dim=0)
 
-                random_idx = torch.randint(
-                    0, num_noisy_points, (remaining,)
-                )
-                points.append(noisy_interior_points[random_idx, :])
-
-            point_cloud = torch.cat(points, dim=0)
-
+        point_cloud = (point_cloud - center) / scale * 2  # -> [-1, 1] entlang längster Achse
         return point_cloud
 
     def __len__(self):
@@ -100,7 +110,7 @@ class MeshData(Dataset):
 
     def __getitem__(self, idx):
         tokens = self.data[idx]
-        point_cloud = self.point_clouds[idx]
+        point_cloud = self.get_point_cloud(self.meshes[idx], self.n_sample_points)
         num_faces = self.face_count[idx]
 
         pad_token = self.tokenizer.pad_token

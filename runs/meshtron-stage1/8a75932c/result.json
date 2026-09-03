@@ -1,0 +1,12 @@
+{
+  "t_total_s": 82.967,
+  "best_val_bpt": 7.170693209195478,
+  "best_val_nll": 4.970345780614191,
+  "best_val_perplexity": 144.07669768771942,
+  "best_epoch": 2,
+  "final_train_bpt": 7.33103072878375,
+  "final_val_bpt": 7.170693209195478,
+  "epochs_run": 3,
+  "config_hash": "8a75932c",
+  "run_dir": "/mnt/fs2/home/trentschler/ws_meshtron/meshtron/runs/meshtron-stage1/8a75932c"
+}

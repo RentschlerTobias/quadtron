@@ -1,0 +1,4 @@
+GpuFreq=control_disabled
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+[2026-07-31T18:33:07.023] error: *** JOB 6108212 ON uc2n577 CANCELLED AT 2026-07-31T18:33:07 DUE TO TIME LIMIT ***
+[2026-07-31T18:33:07.043] error: *** STEP 6108212.0 ON uc2n577 CANCELLED AT 2026-07-31T18:33:07 DUE TO TIME LIMIT ***

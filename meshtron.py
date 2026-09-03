@@ -30,6 +30,8 @@ class Meshtron(nn.Module):
                  n_heads: int = 8,
                  stage_layers: Tuple[int, int, int,
                                      int, int] = (4, 8, 12, 16, 20),
+                 dropout: float = 0.1,
+                 ffn_mult: int = 4,
                  verbose=True):
         super().__init__()
 
@@ -67,8 +69,8 @@ class Meshtron(nn.Module):
             d_model=d_model,
             n_heads=self.n_heads,
             stage_layers=stage_layers,
-            d_ff=4 * d_model,
-            dropout=0.1,
+            d_ff=ffn_mult * d_model,
+            dropout=dropout,
             max_position=max_seq_length
         )
 

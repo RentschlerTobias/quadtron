@@ -1,0 +1,161 @@
+[2026-08-03T01:23:16+02:00] host=uc2n565.localdomain node=uc2n565 part=gpu_a100_short gpu=0
+  data=domain_data_aug.pt d=256 batch=256 epochs=10 lr=3e-4 seed=0 save=runs_planb/s1_aug_6122568.pt init=runs_planb/s1_aug_6122195.pt
+NVIDIA A100-PCIE-40GB, 40960 MiB
++ python -u vertex_head_prototype.py --data domain_data_aug.pt --d-model 256 --batch 256 --epochs 10 --lr 3e-4 --seed 0 --save runs_planb/s1_aug_6122568.pt --init runs_planb/s1_aug_6122195.pt
+Lade domain_data_aug.pt ...
+baue Vertex-Beispiele (alle Facecounts) ...
+31952 Beispiele in 48s  |  facecounts {6: 7988, 24: 7988, 54: 7988, 96: 7988}  |  seq 37..370  vocab 1027
+split: 28757 train / 3195 val
+VertexGen d=256 enc=4 dec=4  Params 8.13M  device=cuda
+== Warmstart aus runs_planb/s1_aug_6122195.pt (war ep10, val-loss 0.869692948757155) -> trainiere weiter ==
+  ep1 train    1/113 loss 0.990 acc 0.632
+  ep1 train   12/113 loss 0.959 acc 0.640
+  ep1 train   23/113 loss 0.953 acc 0.642
+  ep1 train   34/113 loss 0.946 acc 0.644
+  ep1 train   45/113 loss 0.941 acc 0.645
+  ep1 train   56/113 loss 0.936 acc 0.647
+  ep1 train   67/113 loss 0.936 acc 0.647
+  ep1 train   78/113 loss 0.937 acc 0.646
+  ep1 train   89/113 loss 0.936 acc 0.646
+  ep1 train  100/113 loss 0.935 acc 0.647
+  ep1 train  111/113 loss 0.934 acc 0.647
+  ep1 train  113/113 loss 0.934 acc 0.647
+ep   1  tr-loss 0.9344 tr-acc 0.647  |  val-loss 0.8228 val-acc 0.685  lr 3.0e-04 peakVRAM 29.53GB  *best*
+  ep2 train    1/113 loss 0.922 acc 0.652
+  ep2 train   12/113 loss 0.912 acc 0.654
+  ep2 train   23/113 loss 0.906 acc 0.656
+  ep2 train   34/113 loss 0.905 acc 0.656
+  ep2 train   45/113 loss 0.907 acc 0.655
+  ep2 train   56/113 loss 0.910 acc 0.654
+  ep2 train   67/113 loss 0.910 acc 0.654
+  ep2 train   78/113 loss 0.912 acc 0.653
+  ep2 train   89/113 loss 0.912 acc 0.653
+  ep2 train  100/113 loss 0.912 acc 0.653
+  ep2 train  111/113 loss 0.910 acc 0.653
+  ep2 train  113/113 loss 0.910 acc 0.653
+ep   2  tr-loss 0.9100 tr-acc 0.653  |  val-loss 0.7974 val-acc 0.693  lr 2.8e-04 peakVRAM 29.53GB  *best*
+  ep3 train    1/113 loss 0.903 acc 0.654
+  ep3 train   12/113 loss 0.893 acc 0.658
+  ep3 train   23/113 loss 0.895 acc 0.658
+  ep3 train   34/113 loss 0.893 acc 0.659
+  ep3 train   45/113 loss 0.892 acc 0.659
+  ep3 train   56/113 loss 0.892 acc 0.659
+  ep3 train   67/113 loss 0.889 acc 0.660
+  ep3 train   78/113 loss 0.889 acc 0.660
+  ep3 train   89/113 loss 0.889 acc 0.660
+  ep3 train  100/113 loss 0.889 acc 0.660
+  ep3 train  111/113 loss 0.888 acc 0.660
+  ep3 train  113/113 loss 0.888 acc 0.660
+ep   3  tr-loss 0.8876 tr-acc 0.660  |  val-loss 0.7753 val-acc 0.700  lr 2.5e-04 peakVRAM 29.53GB  *best*
+  ep4 train    1/113 loss 0.856 acc 0.671
+  ep4 train   12/113 loss 0.870 acc 0.666
+  ep4 train   23/113 loss 0.865 acc 0.667
+  ep4 train   34/113 loss 0.865 acc 0.667
+  ep4 train   45/113 loss 0.865 acc 0.667
+  ep4 train   56/113 loss 0.865 acc 0.667
+  ep4 train   67/113 loss 0.863 acc 0.668
+  ep4 train   78/113 loss 0.863 acc 0.668
+  ep4 train   89/113 loss 0.865 acc 0.667
+  ep4 train  100/113 loss 0.865 acc 0.667
+  ep4 train  111/113 loss 0.867 acc 0.667
+  ep4 train  113/113 loss 0.867 acc 0.667
+ep   4  tr-loss 0.8667 tr-acc 0.667  |  val-loss 0.7567 val-acc 0.706  lr 2.1e-04 peakVRAM 29.53GB  *best*
+  ep5 train    1/113 loss 0.818 acc 0.683
+  ep5 train   12/113 loss 0.843 acc 0.675
+  ep5 train   23/113 loss 0.845 acc 0.674
+  ep5 train   34/113 loss 0.848 acc 0.673
+  ep5 train   45/113 loss 0.848 acc 0.673
+  ep5 train   56/113 loss 0.848 acc 0.672
+  ep5 train   67/113 loss 0.849 acc 0.672
+  ep5 train   78/113 loss 0.850 acc 0.672
+  ep5 train   89/113 loss 0.850 acc 0.672
+  ep5 train  100/113 loss 0.850 acc 0.672
+  ep5 train  111/113 loss 0.850 acc 0.672
+  ep5 train  113/113 loss 0.849 acc 0.672
+ep   5  tr-loss 0.8491 tr-acc 0.672  |  val-loss 0.7436 val-acc 0.710  lr 1.6e-04 peakVRAM 29.53GB  *best*
+     6F: count-ok 1.00 err% med 0.24 p90 1.13  |  24F: count-ok 0.88 err% med 0.24 p90 1.07  |  54F: count-ok 0.95 err% med 0.29 p90 1.42  |  96F: count-ok 0.84 err% med 0.43 p90 11.92
+  ep6 train    1/113 loss 0.837 acc 0.677
+  ep6 train   12/113 loss 0.839 acc 0.674
+  ep6 train   23/113 loss 0.839 acc 0.675
+  ep6 train   34/113 loss 0.840 acc 0.675
+  ep6 train   45/113 loss 0.836 acc 0.676
+  ep6 train   56/113 loss 0.833 acc 0.677
+  ep6 train   67/113 loss 0.833 acc 0.677
+  ep6 train   78/113 loss 0.834 acc 0.677
+  ep6 train   89/113 loss 0.834 acc 0.677
+  ep6 train  100/113 loss 0.833 acc 0.677
+  ep6 train  111/113 loss 0.833 acc 0.677
+  ep6 train  113/113 loss 0.833 acc 0.677
+ep   6  tr-loss 0.8328 tr-acc 0.677  |  val-loss 0.7307 val-acc 0.716  lr 1.1e-04 peakVRAM 29.53GB  *best*
+  ep7 train    1/113 loss 0.829 acc 0.681
+  ep7 train   12/113 loss 0.825 acc 0.680
+  ep7 train   23/113 loss 0.829 acc 0.679
+  ep7 train   34/113 loss 0.821 acc 0.682
+  ep7 train   45/113 loss 0.822 acc 0.681
+  ep7 train   56/113 loss 0.822 acc 0.681
+  ep7 train   67/113 loss 0.823 acc 0.681
+  ep7 train   78/113 loss 0.821 acc 0.681
+  ep7 train   89/113 loss 0.821 acc 0.681
+  ep7 train  100/113 loss 0.821 acc 0.681
+  ep7 train  111/113 loss 0.820 acc 0.682
+  ep7 train  113/113 loss 0.819 acc 0.682
+ep   7  tr-loss 0.8195 tr-acc 0.682  |  val-loss 0.7220 val-acc 0.719  lr 6.8e-05 peakVRAM 29.53GB  *best*
+  ep8 train    1/113 loss 0.782 acc 0.695
+  ep8 train   12/113 loss 0.803 acc 0.687
+  ep8 train   23/113 loss 0.800 acc 0.689
+  ep8 train   34/113 loss 0.807 acc 0.686
+  ep8 train   45/113 loss 0.809 acc 0.686
+  ep8 train   56/113 loss 0.809 acc 0.686
+  ep8 train   67/113 loss 0.809 acc 0.686
+  ep8 train   78/113 loss 0.810 acc 0.685
+  ep8 train   89/113 loss 0.810 acc 0.685
+  ep8 train  100/113 loss 0.810 acc 0.685
+  ep8 train  111/113 loss 0.810 acc 0.685
+  ep8 train  113/113 loss 0.810 acc 0.685
+ep   8  tr-loss 0.8101 tr-acc 0.685  |  val-loss 0.7161 val-acc 0.722  lr 3.2e-05 peakVRAM 29.53GB  *best*
+  ep9 train    1/113 loss 0.798 acc 0.689
+  ep9 train   12/113 loss 0.800 acc 0.690
+  ep9 train   23/113 loss 0.804 acc 0.688
+  ep9 train   34/113 loss 0.806 acc 0.687
+  ep9 train   45/113 loss 0.806 acc 0.687
+  ep9 train   56/113 loss 0.806 acc 0.687
+  ep9 train   67/113 loss 0.806 acc 0.686
+  ep9 train   78/113 loss 0.804 acc 0.687
+  ep9 train   89/113 loss 0.805 acc 0.687
+  ep9 train  100/113 loss 0.804 acc 0.687
+  ep9 train  111/113 loss 0.804 acc 0.687
+  ep9 train  113/113 loss 0.804 acc 0.687
+ep   9  tr-loss 0.8040 tr-acc 0.687  |  val-loss 0.7134 val-acc 0.723  lr 8.1e-06 peakVRAM 29.53GB  *best*
+  ep10 train    1/113 loss 0.781 acc 0.695
+  ep10 train   12/113 loss 0.801 acc 0.689
+  ep10 train   23/113 loss 0.804 acc 0.687
+  ep10 train   34/113 loss 0.806 acc 0.687
+  ep10 train   45/113 loss 0.806 acc 0.687
+  ep10 train   56/113 loss 0.804 acc 0.688
+  ep10 train   67/113 loss 0.803 acc 0.688
+  ep10 train   78/113 loss 0.803 acc 0.688
+  ep10 train   89/113 loss 0.803 acc 0.688
+  ep10 train  100/113 loss 0.802 acc 0.688
+  ep10 train  111/113 loss 0.801 acc 0.689
+  ep10 train  113/113 loss 0.801 acc 0.689
+ep  10  tr-loss 0.8011 tr-acc 0.689  |  val-loss 0.7124 val-acc 0.723  lr 0.0e+00 peakVRAM 29.53GB  *best*
+     6F: count-ok 1.00 err% med 0.17 p90 0.79  |  24F: count-ok 0.88 err% med 0.22 p90 1.01  |  54F: count-ok 0.93 err% med 0.25 p90 1.09  |  96F: count-ok 0.84 err% med 0.33 p90 11.00
+
+fertig in 1552s.
+bestes Modell (ep10, val-loss 0.7124) -> runs_planb/s1_aug_6122568.pt
+[2026-08-03T01:52:55+02:00] fertig -> runs_planb/s1_aug_6122568.pt
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc2n565
+Job ID: 6122568
+Cluster: uc3
+User/Group: st_ac136362/st_us-042020
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 16
+CPU Utilized: 00:00:00
+CPU Efficiency: 0.00% of 07:57:20 core-walltime
+Job Wall-clock time: 00:29:50
+Memory Utilized: 9.10 GB
+Memory Efficiency: 7.31% of 124.51 GB (124.51 GB/node)

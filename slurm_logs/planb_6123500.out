@@ -1,0 +1,48 @@
+[2026-08-03T02:29:14+02:00] host=uc2n565.localdomain node=uc2n565 part=gpu_a100_short gpu=0
+  data=domain_data_aug.pt d=256 batch=256 ep=[30,10,10] seed=0
+  save-dir=runs_planb/e2e_6123500  out=figures/e2e/e2e_gallery_6123500.png  load-s1=runs_planb/s1_aug_6122568.pt
+NVIDIA A100-PCIE-40GB, 40960 MiB
++ python -u chain_e2e.py --data domain_data_aug.pt --d-model 256 --batch 256 --ep1 30 --ep2 10 --ep3 10 --seed 0 --save-dir runs_planb/e2e_6123500 --out figures/e2e/e2e_gallery_6123500.png --limit 8000 --load-s1 runs_planb/s1_aug_6122568.pt
+Lade domain_data_aug.pt ...
+Meshes: 8000  facecounts {6: 2000, 24: 2000, 54: 2000, 96: 2000}  |  baue Beispiele (S1/S2/S3, index-aligned) ...
+  Beispiele in 641s
+split: 7200 train / 800 val
+== S1 geladen aus runs_planb/s1_aug_6122568.pt (ep10), trainiere nur S2+S3 ==
+  [S2] ep   2  tr 2.9937  val 2.7316
+  [S2] ep   4  tr 2.1918  val 2.0082
+  [S2] ep   6  tr 1.4316  val 1.2292
+  [S2] ep   8  tr 0.9038  val 0.8088
+  [S2] ep  10  tr 0.6795  val 0.6695
+  [S2] trainiert in 104s
+  [S3] ep   2  tr 0.0477  val 0.0202
+  [S3] ep   4  tr 0.0014  val 0.0002
+  [S3] ep   6  tr 0.0007  val 0.0002
+  [S3] ep   8  tr 0.0006  val 0.0002
+  [S3] ep  10  tr 0.0006  val 0.0002
+  [S3] trainiert in 92s
+== 3 Koepfe gespeichert -> runs_planb/e2e_6123500/ ==
+== Chain-Inferenz auf held-out (je Facecount) ==
+
+== E2E-Ergebnis (150 held-out) ==
+    6F (n=1): count-ok 1.00  vert-err% med 0.20  face-exact 0.849  quads-dist 0.960  curve% med 3.13  (N=42)
+   24F (n=2): count-ok 0.91  vert-err% med 0.27  face-exact 0.375  quads-dist 0.632  curve -  (N=35)
+   54F (n=3): count-ok 0.88  vert-err% med 0.28  face-exact 0.066  quads-dist 0.476  curve -  (N=32)
+   96F (n=4): count-ok 0.83  vert-err% med 0.38  face-exact 0.008  quads-dist 0.508  curve -  (N=41)
+== Galerie ==
+wrote figures/e2e/e2e_gallery_6123500.png
+[2026-08-03T02:48:08+02:00] fertig.
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc2n565
+Job ID: 6123500
+Cluster: uc3
+User/Group: st_ac136362/st_us-042020
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 16
+CPU Utilized: 00:00:00
+CPU Efficiency: 0.00% of 05:05:20 core-walltime
+Job Wall-clock time: 00:19:05
+Memory Utilized: 8.64 GB
+Memory Efficiency: 6.94% of 124.51 GB (124.51 GB/node)

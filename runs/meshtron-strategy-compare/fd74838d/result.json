@@ -1,0 +1,12 @@
+{
+  "t_total_s": 644.773,
+  "best_val_bpt": 0.6785920138661248,
+  "best_val_nll": 0.4703641411617997,
+  "best_val_perplexity": 1.6005769230532718,
+  "best_epoch": 29,
+  "final_train_bpt": 0.6425896603836421,
+  "final_val_bpt": 0.6785920138661248,
+  "epochs_run": 30,
+  "config_hash": "fd74838d",
+  "run_dir": "runs/meshtron-strategy-compare/fd74838d"
+}

@@ -1,0 +1,12 @@
+{
+  "t_total_s": 696.422,
+  "best_val_bpt": 0.5212278623794713,
+  "best_val_nll": 0.36128762323761765,
+  "best_val_perplexity": 1.4351761915430088,
+  "best_epoch": 24,
+  "final_train_bpt": 0.5270684822668309,
+  "final_val_bpt": 0.5212278623794713,
+  "epochs_run": 25,
+  "config_hash": "4c0515d3",
+  "run_dir": "runs/meshtron-sorting-fair/4c0515d3"
+}

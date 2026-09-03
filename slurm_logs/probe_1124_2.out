@@ -1,0 +1,32 @@
+============================================================
+HOST       : druckschacht.ihs.uni-stuttgart.de
+NODENAME   : druckschacht.ihs.uni-stuttgart.de
+JOBID      : 1127  ARRAY=1124_2
+PARTITION  : blop
+GPU IDS    : ?  (SLURM_JOB_GPUS=?)
+DATE       : 2026-05-11T00:12:29+02:00
+------------------------------------------------------------
+FEATURES   :
+   CPUAlloc=6 CPUEfctv=6 CPUTot=6 CPULoad=0.02
+   AvailableFeatures=i7e5,x6,siprohs
+   ActiveFeatures=i7e5,x6,siprohs
+   Gres=(null)
+   RealMemory=63467 AllocMem=12288 FreeMem=53593 Sockets=6 Boards=1
+   CfgTRES=cpu=6,mem=63467M,billing=6
+------------------------------------------------------------
+CPU info   :
+  cores avail to job : 2
+  model              : Intel(R) Xeon(R) CPU E5-1650 0 @ 3.20GHz
+MEM info   :
+  MemTotal:      64991008 kB
+  MemAvailable:  63535884 kB
+------------------------------------------------------------
+GPU (nvidia-smi):
+  nvidia-smi nicht im PATH
+------------------------------------------------------------
+PyTorch CUDA check:
+  torch              : 2.10.0+cu130
+  cuda available     : False
+  device count       : 0
+  CUDA_VISIBLE_DEVICES = None
+============================================================
