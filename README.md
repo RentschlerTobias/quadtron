@@ -2,18 +2,60 @@
 
 Autoregressive transformer for 2D quadrilateral mesh generation. Conditioned on a point cloud and a target face count, it generates a token sequence describing quad faces.
 
+## What lives here
+
+Three model families coexist in this repository. They are independent — Plan B
+does not replace the earlier two, and none of them import each other's training
+code. Pick the entry point for the one you want:
+
+| Family | Entry point | What it does | Selector |
+|---|---|---|---|
+| **Meshtron** (2D quads) | `train.py` | Point cloud + face count -> flat quad-token sequence | `--sorting-strategy {0,1,2,3}` |
+| **MeshtronDomain** (block partition) | `train_domain.py` | Domain partition with curved edges, polar `(r, theta)` tokens | `DomainTrainingConfig.sorting_strategy {0,1,2}`, `embedding_mode {0,1,2}` |
+| **Plan B** (two-stage) | `chain_e2e.py` | Topology split from geometry: S1 vertices -> S2 pointer faces -> S3 HO geometry | `--ep1/--ep2/--ep3`, `--load-s1`, `--init` |
+
+Plan B is deliberately standalone: `prototype_twostage.py` and the three
+`*_head_prototype.py` modules do not touch the production tokenizer classes, so
+the earlier pipelines keep working unchanged.
+
 ## Running
 
 No package build. Run scripts directly:
 
 ```bash
+# Meshtron -- the original 2D quad pipeline
 python train.py                 # train with TrainingConfig defaults
 python train.py --config x.json # train from a JSON config (CLI flags override fields)
-python testing.py               # load checkpoint and run inference / generation
+python train.py --sorting-strategy 2
 python validation.py            # inspect checkpoints and plot training history
+
+# MeshtronDomain -- block partition on domain data
+python train_domain.py
+python inference_domain.py
+
+# Plan B -- two-stage chain, end to end
+python chain_e2e.py --ep1 20 --ep2 25 --ep3 25
+python chain_e2e.py --load-s1 <checkpoint>   # reuse a pretrained stage 1
 ```
 
-Dependencies (install manually): `torch`, `torch_geometric`, `openmesh`, `numpy`, `matplotlib`, `tqdm`.
+Dependencies are pinned in `pyproject.toml` (uv, CUDA 12.8 wheels): `uv sync`.
+`openmesh` needs a C++ build and is optional -- only the `half_edge` modules use
+it, not the training paths: `uv sync --extra mesh`.
+
+## Datasets
+
+Datasets are **not** stored in this repository. `.gitignore` excludes `*.pt`,
+and the entry points expect the files next to the scripts:
+
+| File | Used by | Config field |
+|---|---|---|
+| `centered_blades_cleaned.pt` | `train.py` | `TrainingConfig.data_path` |
+| `domain_data_10k.pt` | `train_domain.py` | `DomainTrainingConfig.data_path` |
+| `domain_data_aug.pt` | `chain_e2e.py` | `--data` |
+| `meta_mesh.pt` | `testing.py` | -- |
+
+Point `--data-path` at wherever you keep them, or drop them into the working
+directory before starting a run.
 
 ## Module layout
 
@@ -36,7 +78,19 @@ Dependencies (install manually): `torch`, `torch_geometric`, `openmesh`, `numpy`
 - `embedding.py` — token embedding (positional encoding currently disabled there; positions handled inside attention via RoPE).
 
 ### Data
-- `tokenizer_v2.py` — current tokenizer. 8 tokens per quad face (4 vertices × 2 coordinates), each quantized into discrete levels (default 256). Vocabulary size = `quantization_levels + 3` (BOS, EOS, PAD). `sorting_strategy=1` (adjacent / topological row-direction ordering) is the only supported strategy after the recent cleanup. `tokenizer.py` is the legacy v1.
+- `tokenizer_v2.py` — current tokenizer. 8 tokens per quad face (4 vertices × 2 coordinates), each quantized into discrete levels (default 256). Vocabulary size = `quantization_levels + 3` (BOS, EOS, PAD). `tokenizer.py` is the legacy v1.
+
+  Four ordering strategies are implemented and selectable via `--sorting-strategy` (`_order_quads`); these are the `s0`–`s3` arms of the AIFLUIDS sorting study in `runs/`:
+
+  | Strategy | Ordering | Emission |
+  |---|---|---|
+  | `0` | lexicographical (baseline) | uncompressed |
+  | `1` | adjacent-face directed row ordering (default) | uncompressed |
+  | `2` | adjacent rows | row-compressed |
+  | `3` | adjacent rows, left-to-right | row-compressed |
+
+- `tokenizer_domain.py` — tokenizer for the domain-partition family. Independent `sorting_strategy` axis: `0` = no compression, `1` = row-compressed, `2` = vertex-first, combined with `embedding_mode` (`0` split vocab, `1` shared, `2` separate).
+- `prototype_twostage.py` — `TwoStageTokenizer` for Plan B. Emits unique block corners once as quantized `(r, theta)`, then each quad as four pointers into that vertex list, so face validity holds by construction.
 - `dataset.py` — `MeshData`. Tokenizes meshes, samples a fixed-size point cloud (boundary first, then interior, with noise replication if interior is small), and produces shifted `(input_tokens, target_tokens)` pairs for next-token prediction.
 
 ## Loss and metrics
@@ -72,6 +126,15 @@ The config hash is a deterministic 8-char digest of all fields, so identical con
 - Don't average per-batch loss values across batches; use `TokenLossAccumulator`.
 - New training objectives plug in by implementing `Objective.compute(batch, policy) -> ObjectiveOutput`. The trainer is objective-agnostic.
 - Checkpointing is off by default; turn on explicitly per run via `--save-best` / `--save-last`.
+
+## Known broken
+
+These were committed mid-edit on the Plan-B branch and do not parse. They came
+across unchanged in the merge and need a fix before use:
+
+- `test.py:15` — `for mesh i meshes:` (missing `in`), and the following `if` is mis-indented
+- `testing.py` — unterminated f-string, reported at line 61
+- `validation.py:155` — empty `else:` block, body not indented
 
 ## Hardware notes
 
