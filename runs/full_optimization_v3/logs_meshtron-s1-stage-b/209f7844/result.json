@@ -1,0 +1,12 @@
+{
+  "t_total_s": 417.565,
+  "best_val_bpt": 0.4181083666016046,
+  "best_val_nll": 0.2898106354784262,
+  "best_val_perplexity": 1.3361744400334963,
+  "best_epoch": 12,
+  "final_train_bpt": 0.09490131177534424,
+  "final_val_bpt": 0.4189912921493542,
+  "epochs_run": 14,
+  "config_hash": "209f7844",
+  "run_dir": "/sandbox/logs_meshtron-s1-stage-b/209f7844"
+}

@@ -1,0 +1,12 @@
+{
+  "t_total_s": 4.71,
+  "best_val_bpt": Infinity,
+  "best_val_nll": Infinity,
+  "best_val_perplexity": Infinity,
+  "best_epoch": -1,
+  "final_train_bpt": NaN,
+  "final_val_bpt": NaN,
+  "epochs_run": 1,
+  "config_hash": "46454c98",
+  "run_dir": "/sandbox/logs_meshtron-s3-stage-a/46454c98"
+}
